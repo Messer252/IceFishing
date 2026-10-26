@@ -6,6 +6,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local Reel = require(ReplicatedStorage.Shared:WaitForChild("Reel"))
+local Progression = require(ReplicatedStorage.Shared:WaitForChild("Progression"))
 local Preview = require(script.Parent:WaitForChild("EquipmentPreview"))
 require(script.Parent:WaitForChild("AnglerAnimation")).start()
 local remotes = ReplicatedStorage:WaitForChild("FishingRemotes")
@@ -57,10 +58,15 @@ local keyHeld, reelPointer = false, nil
 local brand = frame(gui, UDim2.fromOffset(252, 76), UDim2.fromOffset(16, 16))
 text(brand, "F R O S T B I T E", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 20, C.mint).Font = Enum.Font.GothamBold
 text(brand, "ICE FISHING  /  FROZEN WILDERNESS", UDim2.new(1, -28, 0, 20), UDim2.fromOffset(14, 43), 10, C.muted)
-local wallet = frame(gui, UDim2.fromOffset(190, 76), UDim2.new(1, -206, 0, 16))
+local wallet = frame(gui, UDim2.fromOffset(190, 138), UDim2.new(1, -206, 0, 16))
 local coins = text(wallet, "120 coins", UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 9), 21, C.gold)
 coins.Font = Enum.Font.GothamBold
-local bagCount = text(wallet, "0 fish in bag", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 43), 13, C.muted)
+local bagCount = text(wallet, "Loading your profile...", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 43), 13, C.muted)
+local levelLabel = text(wallet, "Level 1", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 68), 11, C.mint)
+local xpTrack = frame(wallet, UDim2.new(1, -24, 0, 7), UDim2.fromOffset(12, 94), C.dark)
+local xpFill = frame(xpTrack, UDim2.fromScale(0, 1), UDim2.fromOffset(0, 0), C.mint)
+local dataMode = text(wallet, "Loading saved progress...", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 106), 10, C.muted)
+player:GetAttributeChangedSignal("DataMode"):Connect(function() dataMode.Text = player:GetAttribute("DataMode") or "Loading saved progress..." end)
 local guide = frame(gui, UDim2.fromOffset(246, 167), UDim2.fromOffset(16, 108))
 text(guide, "A QUIET DAY ON THE ICE", UDim2.fromOffset(218, 26), UDim2.fromOffset(14, 10), 12, C.gold).Font = Enum.Font.GothamBold
 text(guide, "01  Walk onto the frozen pond\n02  Drill once, reuse your hole\n03  Hold to follow the moving fish\n04  Sell fish at the cabin for gear", UDim2.fromOffset(218, 110), UDim2.fromOffset(14, 43), 14, C.muted)
@@ -161,12 +167,15 @@ render = function()
             Preview.mount(viewport, category, item.id)
             button(card, "3D VIEW", UDim2.fromOffset(88, 22), UDim2.fromOffset(8, 97), function() inspect(category, item) end, C.gold)
             text(card, item.name, UDim2.new(1, -270, 0, 28), UDim2.fromOffset(110, 8), 16).Font = Enum.Font.GothamBold
-            text(card, item.description, UDim2.new(1, -276, 0, 68), UDim2.fromOffset(110, 40), 13, C.muted)
+            text(card, item.description, UDim2.new(1, -276, 0, 40), UDim2.fromOffset(110, 38), 12, C.muted)
+            text(card, Config.gearStats(category, item), UDim2.new(1, -276, 0, 37), UDim2.fromOffset(110, 82), 10, C.mint)
             local equipped = profile.equipped[category] == item.id
             local owned = category ~= "bait" and profile.owned[category][item.id]
             local stock = category == "bait" and (profile.bait[item.id] or 0) or 0
             local hasBait = category == "bait" and (item.amount == 0 or stock > 0)
             local caption = equipped and "EQUIPPED" or ((owned or hasBait) and "EQUIP" or (item.cost .. " COINS"))
+            local locked = not owned and (profile.level or 1) < (item.requiredLevel or 1)
+            if locked then caption = "LEVEL " .. item.requiredLevel end
             if category == "bait" and equipped and item.amount > 0 then caption = "+10 / " .. item.cost .. " COINS" end
             button(card, caption, UDim2.fromOffset(136, 36), UDim2.new(1, -150, 0, 22), function()
                 send("buy", { category = category, id = item.id, equip = hasBait and not equipped })
@@ -271,6 +280,10 @@ end
 event.OnClientEvent:Connect(function(kind, data)
     if kind == "profile" then
         profile = data
+        local progress = Progression.describe(data.xp)
+        levelLabel.Text = "Level " .. progress.level .. "  /  " .. progress.current .. " of " .. progress.required .. " XP"
+        xpFill.Size = UDim2.fromScale(progress.fraction, 1)
+        dataMode.Text = player:GetAttribute("DataMode") or "Saved progression"
         coins.Text, bagCount.Text = data.coins .. " coins", #data.bag .. " fish  /  " .. bagValue() .. " coin value"
         local names = {}
         for _, category in ipairs({ "auger", "rod", "lure", "bait" }) do
@@ -306,7 +319,7 @@ event.OnClientEvent:Connect(function(kind, data)
         Reel.receiveView(reelView, data, workspace:GetServerTimeNow(), held, Config.Fishing)
     elseif kind == "caught" then
         endFishing()
-        notice("CAUGHT  " .. data.name .. "\n" .. data.rarity .. "  /  " .. data.kg .. " kg  /  " .. data.value .. " coins", Color3.fromRGB(data.color[1], data.color[2], data.color[3]))
+        notice("CAUGHT  " .. data.name .. "\n" .. data.rarity .. "  /  " .. data.kg .. " kg  /  " .. data.value .. " coins\n+" .. data.xp .. " XP" .. (data.discovery and "  /  NEW SPECIES" or "") .. (data.trophy and "  /  TROPHY" or ""), Color3.fromRGB(data.color[1], data.color[2], data.color[3]))
     elseif kind == "ended" then endFishing() notice(data) end
 end)
 
@@ -338,6 +351,8 @@ RunService.RenderStepped:Connect(function(dt)
         brand.Visible = lastViewport.X > 490
     end
 end)
+
+require(script.Parent:WaitForChild("AdminMenu")).start(gui, remotes)
 
 -- Retry the handshake until the server has registered this player.
 task.spawn(function()

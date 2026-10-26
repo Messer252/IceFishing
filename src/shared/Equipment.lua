@@ -1,7 +1,7 @@
 -- Original asset-free models shared by held tools, cabin racks and 3D previews.
 local Equipment = {}
 local palettes = {
-    hand = { 170, 91, 54 }, steel = { 96, 149, 163 }, power = { 226, 163, 57 }, arctic = { 107, 220, 231 },
+    hand = { 170, 91, 54 }, steel = { 96, 149, 163 }, power = { 226, 163, 57 }, arctic = { 107, 220, 231 }, titanium = { 165, 163, 216 }, pro = { 196, 146, 80 },
     twig = { 139, 88, 53 }, birch = { 205, 167, 111 }, carbon = { 75, 127, 166 }, glacier = { 124, 230, 228 },
     plain = { 166, 184, 193 }, copper = { 210, 134, 65 }, silver = { 207, 227, 240 }, aurora = { 166, 139, 245 },
     bread = { 236, 201, 137 }, worms = { 195, 106, 113 }, minnows = { 106, 183, 207 },
@@ -67,7 +67,7 @@ function Equipment.build(category, id)
         for _, x in ipairs({ -0.85, 0.85 }) do
             piece(model, "Grip", Vector3.new(0.55, 0.28, 0.28), CFrame.new(x, 0.45, 0), dark, Enum.PartType.Cylinder)
         end
-        if id == "power" or id == "arctic" then
+        if id == "power" or id == "arctic" or id == "titanium" then
             piece(model, "MotorHousing", Vector3.new(1.1, 0.95, 0.85), CFrame.new(0, 0.8, 0), accent)
             piece(model, "FuelCap", Vector3.new(0.16, 0.3, 0.3), CFrame.new(0.33, 1.32, 0) * CFrame.Angles(0, 0, math.pi / 2), dark, Enum.PartType.Cylinder)
             for i = 1, 4 do piece(model, "CoolingVent", Vector3.new(0.65, 0.045, 0.04), CFrame.new(0, 0.5 + i * 0.13, -0.44), dark) end

@@ -7,6 +7,10 @@ local Reel = require(ReplicatedStorage.Shared.Reel)
 local HoleRules = require(ReplicatedStorage.Shared.HoleRules)
 local Equipment = require(ReplicatedStorage.Shared.Equipment)
 local World = require(script.Parent.World)
+local Data = require(script.Parent.PlayerDataService)
+local AdminService = require(script.Parent.AdminService)
+local Progression = require(ReplicatedStorage.Shared.Progression)
+local FishGeneration = require(ReplicatedStorage.Shared.FishGeneration)
 
 local world, shopPrompt, sellPrompt = World.build(Config)
 local remotes = Instance.new("Folder")
@@ -17,6 +21,7 @@ local event = Instance.new("RemoteEvent")
 event.Name, event.Parent = "Event", remotes
 local rng = Random.new()
 local profiles, sessions, holes, limits = {}, {}, {}, {}
+local loading, closing = {}, false
 
 local function notify(player, message) event:FireClient(player, "notice", message) end
 local function rootOf(player)
@@ -40,6 +45,8 @@ local function pushProfile(player)
     if not p then return end
     player.leaderstats.Coins.Value = p.coins
     player.leaderstats.Fish.Value = #p.bag
+    p.level = Progression.describe(p.xp).level
+    player.leaderstats.Level.Value = p.level
     event:FireClient(player, "profile", p)
 end
 local function removeHole(player)
@@ -92,12 +99,21 @@ local function finish(player, outcome, message)
     unlockMovement(s)
     if outcome == "caught" and profiles[player] then
         local fish = s.fish
-        local kg = math.floor(fish.kg * rng:NextNumber(0.65, 1.5) * 100) / 100
-        local value = math.floor(fish.value * kg / fish.kg)
-        local catch = { name = fish.name, rarity = fish.rarity, kg = kg, value = value, color = fish.color }
-        table.insert(profiles[player].bag, catch)
+        local p = profiles[player]
+        local discovery = not p.discoveries[fish.id]
+        p.discoveries[fish.id] = true
+        p.records[fish.id] = math.max(p.records[fish.id] or 0, fish.kg)
+        p.statistics.catches = p.statistics.catches + 1
+        local xp = fish.xp + (discovery and 15 or 0) + (fish.trophy and 12 or 0)
+        local leveledUp = Progression.add(p, xp)
+        local catch = { catchId = HttpService:GenerateGUID(false), species = fish.id, name = fish.name,
+            rarity = fish.rarity, kg = fish.kg, value = fish.value, color = fish.color, xp = xp,
+            trophy = fish.trophy, caughtAt = os.time(), location = Config.Region,
+            variant = "Normal", locked = false, favorite = false, discovery = discovery }
+        table.insert(p.bag, catch)
         pushProfile(player)
         event:FireClient(player, "caught", catch)
+        if leveledUp then notify(player, "Level " .. p.level .. "! New equipment is available in the shop.") end
     else event:FireClient(player, "ended", message or "The fish escaped. Cast into the same hole to try again!") end
     -- The hole deliberately survives catches, cancellations and character resets.
 end
@@ -108,6 +124,10 @@ local function buy(player, data)
     if type(data) ~= "table" or type(data.category) ~= "string" or type(data.id) ~= "string" then return end
     local item, p = Config.findGear(data.category, data.id), profiles[player]
     if not item then return end
+    local alreadyOwned = data.category ~= "bait" and p.owned[data.category][item.id]
+    if not alreadyOwned and Progression.describe(p.xp).level < (item.requiredLevel or 1) then
+        notify(player, "Reach level " .. item.requiredLevel .. " to unlock " .. item.name .. ".") return
+    end
     if data.category == "bait" then
         if item.amount == 0 then p.equipped.bait = item.id
         elseif (p.bait[item.id] or 0) > 0 and data.equip == true then p.equipped.bait = item.id
@@ -146,7 +166,9 @@ local function startLine(player, s, hole)
     task.delay(Config.CastDuration, function()
         if sessions[player] ~= s then return end
         if bait.amount > 0 then p.bait[bait.id] = p.bait[bait.id] - 1 end
-        s.fish = Config.selectFish(HoleRules.fishingTier(hole), hole.luck + rod.luck + lure.luck + bait.luck, rng:NextNumber())
+        s.fish = FishGeneration.roll(Config, HoleRules.fishingTier(hole), hole.luck + rod.luck + lure.luck + bait.luck,
+            { bait = bait.id, lure = lure.id, strength = rod.strength }, function() return rng:NextNumber() end)
+        s.settings = Config.reelSettings(rod)
         s.width = Config.Fishing.BaseWidth + rod.control
         s.line, s.bobber = World.line(hole, s.tool)
         s.lineLowerUntil = workspace:GetServerTimeNow() + 0.45
@@ -154,7 +176,7 @@ local function startLine(player, s, hole)
         setStage(s, "waiting")
         pushProfile(player)
         event:FireClient(player, "stage", { token = s.token, stage = "waiting", reused = s.reused })
-        task.delay(rng:NextNumber(1.8, 4.2), function()
+        task.delay(rng:NextNumber(1.8, 4.2) / bait.biteSpeed, function()
             if sessions[player] ~= s then return end
             if not onPond(player) then finish(player, "escaped", "Your cast was interrupted.") return end
             s.elapsed, s.simAccumulator, s.sendAccumulator = 0, 0, 0
@@ -166,6 +188,7 @@ local function startLine(player, s, hole)
 end
 
 cast = function(player, forceNew)
+    if player:GetAttribute("AdminFlying") or player:GetAttribute("AdminFrozen") then notify(player, "Stop flying or unfreeze before fishing.") return end
     if sessions[player] then notify(player, "You're already fishing. Use Cancel to stop.") return end
     if not onPond(player) then notify(player, "Walk onto the frozen pond first.") return end
     local p, root = profiles[player], rootOf(player)
@@ -228,10 +251,13 @@ cast = function(player, forceNew)
 end
 
 local function sellFish(player)
-    if not profiles[player] then return end
+    if closing or not profiles[player] or player:GetAttribute("ProfileReady") ~= true then return end
     if not nearShop(player) or sessions[player] then notify(player, "Visit the shop after finishing your cast to sell fish.") return end
     local p, value = profiles[player], 0
     for _, fish in ipairs(p.bag) do value = value + fish.value end
+    if p.coins + value > Config.MaxCoins then notify(player, "You have reached the coin limit. Your fish have been kept.") return end
+    p.statistics.sold = p.statistics.sold + #p.bag
+    p.statistics.earned = p.statistics.earned + value
     p.bag, p.coins = {}, p.coins + value
     pushProfile(player)
     notify(player, value > 0 and ("Sold your catch for " .. value .. " coins!") or "Your bag is empty. Head to the pond!")
@@ -239,7 +265,7 @@ end
 
 local allowedActions = { ready = true, shop = true, buy = true, sell = true, cast = true, drill = true, cancel = true, input = true }
 command.OnServerEvent:Connect(function(player, action, data)
-    if not profiles[player] or type(action) ~= "string" then return end
+    if closing or not profiles[player] or player:GetAttribute("ProfileReady") ~= true or type(action) ~= "string" then return end
     if not allowedActions[action] then return end
     local now = os.clock()
     limits[player] = limits[player] or {}
@@ -270,33 +296,57 @@ sellPrompt.Triggered:Connect(function(player)
     if root and (root.Position - Vector3.new(11, 4, -86)).Magnitude <= 12 then sellFish(player) end
 end)
 
+AdminService.start({ profiles = profiles, remotes = remotes, pushProfile = pushProfile, notify = notify, cancel = finish })
+
 local function addPlayer(player)
-    if profiles[player] then return end
-    profiles[player] = { coins = Config.StartingCoins, bag = {}, bait = { worms = 0, minnows = 0 },
-        equipped = { auger = "hand", rod = "twig", lure = "plain", bait = "bread" },
-        owned = { auger = { hand = true }, rod = { twig = true }, lure = { plain = true } } }
+    if profiles[player] or loading[player] or closing then return end
+    loading[player] = true
+    player:SetAttribute("ProfileReady", false)
+    local profile, problem = Data.load(player)
+    loading[player] = nil
+    if not profile then
+        if player.Parent == Players then player:Kick(problem or "Your saved profile could not be loaded. Please rejoin.") end
+        return
+    end
+    if closing or player.Parent ~= Players then Data.release(player) return end
+    profiles[player] = profile
     local stats = Instance.new("Folder")
     stats.Name, stats.Parent = "leaderstats", player
-    for _, name in ipairs({ "Coins", "Fish" }) do
+    for _, name in ipairs({ "Coins", "Fish", "Level" }) do
         local value = Instance.new("IntValue")
         value.Name, value.Parent = name, stats
     end
+    player:SetAttribute("ProfileReady", true)
     pushProfile(player)
     player.CharacterRemoving:Connect(function() finish(player, "escaped", "Cast interrupted. Your hole is still there.") end)
 end
 Players.PlayerAdded:Connect(addPlayer)
-for _, player in ipairs(Players:GetPlayers()) do addPlayer(player) end
+for _, player in ipairs(Players:GetPlayers()) do task.spawn(function() addPlayer(player) end) end
 Players.PlayerRemoving:Connect(function(player)
     local s = sessions[player]
     if s then clearTool(s) unlockMovement(s) end
+    player:SetAttribute("ProfileReady", false)
     sessions[player], profiles[player], limits[player] = nil, nil, nil
     removeHole(player)
+    Data.release(player)
+end)
+game:BindToClose(function()
+    closing = true
+    for player in pairs(profiles) do
+        finish(player, "escaped", "The server is closing.")
+        player:SetAttribute("ProfileReady", false)
+    end
+    Data.shutdown()
 end)
 
+local maintenance = 0
+
 RunService.Heartbeat:Connect(function(dt)
+    maintenance = maintenance + dt
+    if maintenance >= 1 then maintenance = 0 Data.step() end
     for player, s in pairs(sessions) do
         local root = rootOf(player)
-        if not root or (root.Position - s.position).Magnitude > 8 then
+        if player:GetAttribute("ProfileReady") ~= true or not root or (root.Position - s.position).Magnitude > 8 then
             finish(player, "escaped", "Your cast was interrupted. The hole is ready to use again.")
         else
             local t = workspace:GetServerTimeNow() - s.stageAt
@@ -320,7 +370,7 @@ RunService.Heartbeat:Connect(function(dt)
                 while s.simAccumulator >= Config.Fishing.FixedStep and not outcome do
                     s.simAccumulator = s.simAccumulator - Config.Fishing.FixedStep
                     s.elapsed = s.elapsed + Config.Fishing.FixedStep
-                    outcome = Reel.step(s, Config.Fishing.FixedStep, s.held, s.fish, Config.Fishing, s.elapsed)
+                    outcome = Reel.step(s, Config.Fishing.FixedStep, s.held, s.fish, s.settings, s.elapsed)
                 end
                 if outcome then finish(player, outcome)
                 elseif s.sendAccumulator >= Config.Fishing.Tick then

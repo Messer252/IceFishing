@@ -28,17 +28,20 @@ class PlaceTests(unittest.TestCase):
                 walk(child, current)
 
         walk(tree.getroot())
-        expected = {
-            "/ReplicatedStorage/Shared/Config": ("ModuleScript", "src/shared/Config.lua"),
-            "/ReplicatedStorage/Shared/Reel": ("ModuleScript", "src/shared/Reel.lua"),
-            "/ReplicatedStorage/Shared/Equipment": ("ModuleScript", "src/shared/Equipment.lua"),
-            "/ReplicatedStorage/Shared/HoleRules": ("ModuleScript", "src/shared/HoleRules.lua"),
-            "/ServerScriptService/Server/World": ("ModuleScript", "src/server/World.lua"),
-            "/ServerScriptService/Server/Game": ("Script", "src/server/Game.server.lua"),
-            "/StarterPlayer/StarterPlayerScripts/Client/Game": ("LocalScript", "src/client/Game.client.lua"),
-            "/StarterPlayer/StarterPlayerScripts/Client/AnglerAnimation": ("ModuleScript", "src/client/AnglerAnimation.lua"),
-            "/StarterPlayer/StarterPlayerScripts/Client/EquipmentPreview": ("ModuleScript", "src/client/EquipmentPreview.lua"),
-        }
+        expected = {}
+        for directory, prefix in (
+            ("shared", "/ReplicatedStorage/Shared"),
+            ("server", "/ServerScriptService/Server"),
+            ("client", "/StarterPlayer/StarterPlayerScripts/Client"),
+        ):
+            for file in (ROOT / "src" / directory).rglob("*.lua"):
+                name = file.stem
+                kind = "ModuleScript"
+                if name.endswith(".server"):
+                    name, kind = name[:-7], "Script"
+                elif name.endswith(".client"):
+                    name, kind = name[:-7], "LocalScript"
+                expected[f"{prefix}/{name}"] = (kind, file.relative_to(ROOT).as_posix())
         self.assertEqual(set(sources), set(expected))
         for path, (kind, file) in expected.items():
             self.assertEqual(sources[path], (kind, (ROOT / file).read_text()))

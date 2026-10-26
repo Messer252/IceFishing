@@ -37,12 +37,16 @@ Open the built place and press Play. Confirm Output has no errors. Join, drill o
 
 The NPC and generated equipment are original primitive-based prototype models. Audio, final rigged fish, polished authored animation clips, and full art direction remain unfinished content. Do not advertise these as completed assets.
 
-## Next phases, in order
+## Phase 2 implementation
+
+The user explicitly authorized proceeding to Phase 2. See [Phase 2 progression, persistence, and admin tools](PHASE2.md) for implemented systems, changed files, safe Studio data testing, owner setup, and remaining acceptance checks. The first-phase engine checks above remain pending; proceeding does not assert they passed.
+
+## Remaining validation and phases
 
 1. **Close Phase 1:** correct any errors or usability issues found by the Studio acceptance playtest, then tune catch timing and the first upgrade against real play sessions.
-2. **Phase 2 — progression:** introduce versioned player profiles with safe load failure behavior, UpdateAsync session ownership, autosave, shutdown saving, migrations, and a separate Studio test namespace. Add XP/levels, full species definitions, richer equipment statistics, and balanced unlocks. Do not save every individual catch directly to DataStore.
+2. **Phase 2 — progression (implemented; engine/service acceptance pending):** validate versioned player profiles with safe load failure behavior, UpdateAsync session ownership, autosave, shutdown saving, migrations, and a separate Studio test namespace. Add XP/levels, full species definitions, richer equipment statistics, and balanced unlocks. Do not save every individual catch directly to DataStore.
 3. **Phase 3 — content:** unique catch IDs, variants, locked/favorited inventory and individual selling, bestiary/records, quests, trophies, and additional regions. Keep generation, currency, ownership, and rewards authoritative on the server.
 4. **Phase 4 — polish:** final equipment/fish assets and animation clips, licensed/original audio, tutorial guidance, weather/day-night effects, environmental detail, UI transitions, accessibility, and full device/controller testing.
 5. **Phase 5 — production validation:** failure/reconnect tests for persistence, remote abuse/replay tests, multi-client performance tests targeting 10–15 players, profiling on low-end devices, progression balancing, and deployment checks.
 
-Do not expand into additional lakes until the starter loop passes. Preserve working systems; extract services when their responsibilities grow rather than replacing the project with a monolithic script. User-facing controls must perform real actions. Missing assets and untested capabilities must remain clearly labeled.
+Keep additional lakes behind the starter-loop acceptance gate. Preserve working systems; extract services when their responsibilities grow rather than replacing the project with a monolithic script. User-facing controls must perform real actions. Missing assets and untested capabilities must remain clearly labeled.

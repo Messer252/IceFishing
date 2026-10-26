@@ -3,6 +3,10 @@
 local Config = dofile("src/shared/Config.lua")
 local Reel = dofile("src/shared/Reel.lua")
 local HoleRules = dofile("src/shared/HoleRules.lua")
+local Progression = dofile("src/shared/Progression.lua")
+local FishGeneration = dofile("src/shared/FishGeneration.lua")
+local Settings = dofile("src/server/ServerSettings.lua")
+local Schema = dofile("src/server/ProfileSchema.lua").create(Config, Progression)
 local checks = 0
 local mode = "server"
 local function check(value, message) assert(value, message) checks = checks + 1 end
@@ -41,7 +45,7 @@ function CF:Lerp(other) return other end
 local methods, meta = {}, {}
 local currentPlayer
 local function instance(class)
-    local obj = { props = { ClassName = class, Name = class, Visible = true }, children = {}, attributes = {} }
+    local obj = { props = { ClassName = class, Name = class, Visible = true, Anchored = false, PlatformStand = false, MoveDirection = vec() }, children = {}, attributes = {} }
     for _, name in ipairs({ "OnServerEvent", "OnClientEvent", "Triggered", "CharacterRemoving", "CharacterAdded", "Activated", "InputBegan", "InputEnded", "InputChanged", "Destroying" }) do obj.props[name] = signal() end
     return setmetatable(obj, meta)
 end
@@ -78,7 +82,18 @@ function methods:Destroy()
     rawset(self, "destroyed", true)
     self.Parent = nil
 end
-function methods:SetAttribute(name, value) self.attributes[name] = value end
+function methods:GetAttributeChangedSignal(name)
+    self.attributeSignals = self.attributeSignals or {}
+    self.attributeSignals[name] = self.attributeSignals[name] or signal()
+    return self.attributeSignals[name]
+end
+function methods:SetAttribute(name, value)
+    local old = self.attributes[name]
+    self.attributes[name] = value
+    if old ~= value and self.attributeSignals and self.attributeSignals[name] then self.attributeSignals[name]:Fire() end
+end
+function methods:Kick(reason) self.KickedReason = reason end
+function methods:LoadCharacterAsync() self.RespawnCount = (self.RespawnCount or 0) + 1 end
 function methods:GetAttribute(name) return self.attributes[name] end
 function methods:SetStateEnabled(_, value) self["stateEnabled_" .. mode] = value end
 function methods:GetStateEnabled() return self["stateEnabled_" .. mode] ~= false end
@@ -122,11 +137,17 @@ players.PlayerAdded, players.PlayerRemoving = signal(), signal()
 local player = instance("Player")
 player.UserId, player.DisplayName, player.Parent = 123, "TestAngler", players
 currentPlayer, players.LocalPlayer = player, player
-function players:GetPlayers() return { player } end
+local playerList = { player }
+function players:GetPlayers() return playerList end
+function players:GetPlayerByUserId(id) for _, p in ipairs(playerList) do if p.UserId == id then return p end end end
+function players:GetUserIdFromNameAsync(name) assert(name == "unbenator") return 123 end
+player.Name = "unbenator"
 local character = instance("Model")
 character.Name, character.Parent, player.Character = "Character", instance("Workspace"), character
 local humanoid = child(character, "Humanoid")
 humanoid.Health, humanoid.WalkSpeed, humanoid.JumpPower, humanoid.JumpHeight, humanoid.AutoRotate = 100, 16, 50, 7.2, true
+CF.Rotation = cf()
+humanoid.MaxHealth = 100
 local root = child(character, "Part", "HumanoidRootPart")
 root.Position, root.CFrame = vec(0, 5, 0), cf(0, 5, 0)
 child(player, "PlayerGui")
@@ -152,7 +173,7 @@ function Equipment.mount(anglerCharacter, category, id)
     return model, instance("Motor6D"), cf()
 end
 local shared = child(storage, "Folder", "Shared")
-for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment }) do
+for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment, Progression = Progression, FishGeneration = FishGeneration }) do
     local m = child(shared, "ModuleScript", name)
     m.module = module
 end
@@ -163,23 +184,30 @@ local bound = {}
 local context = {}
 function context:BindActionAtPriority(name, fn, _, priority) bound[name] = { fn = fn, priority = priority } end
 function context:UnbindAction(name) bound[name] = nil end
-local input = { InputBegan = signal(), InputEnded = signal(), InputChanged = signal(), WindowFocusReleased = signal(), GetFocusedTextBox = function() return nil end }
+local input = { InputBegan = signal(), InputEnded = signal(), InputChanged = signal(), WindowFocusReleased = signal(), GetFocusedTextBox = function() return nil end, IsKeyDown = function() return false end }
 local enums = setmetatable({ ContextActionPriority = { High = { Value = 3000 } } }, { __index = function(t, k)
     local values = setmetatable({}, { __index = function(_, n) return n end }) rawset(t, k, values) return values
 end })
-local services = { Players = players, ReplicatedStorage = storage, RunService = { Heartbeat = heartbeat, RenderStepped = render },
+local services = { Players = players, ReplicatedStorage = storage, RunService = { Heartbeat = heartbeat, RenderStepped = render, IsStudio = function() return true end },
     HttpService = { GenerateGUID = function() return tostring(now) end }, UserInputService = input, ContextActionService = context }
 local env = setmetatable({
-    game = { GetService = function(_, name) return assert(services[name], "Missing service " .. name) end },
+    game = { BindToClose = function(_, fn) worldState.shutdown = fn end, GetService = function(_, name) return assert(services[name], "Missing service " .. name) end },
     workspace = workspaceFake, Instance = { new = instance }, Enum = enums,
-    Vector3 = { new = vec }, Vector2 = { new = vec, zero = vec() }, CFrame = { new = cf, Angles = function() return cf() end, lookAt = function(position) return cf(position) end },
+    Vector3 = { new = vec, zero = vec() }, Vector2 = { new = vec, zero = vec() }, CFrame = { new = cf, Angles = function() return cf() end, lookAt = function(position) return cf(position) end },
     Color3 = { new = vec, fromRGB = vec }, UDim = { new = function(...) return { ... } end },
     UDim2 = { new = function(...) return { ... } end, fromOffset = function(...) return { ... } end, fromScale = function(...) return { ... } end },
     Random = { new = function() return { NextNumber = function(_, lo, hi) if not lo then return 0.1 end return (lo + hi) / 2 end } end },
     task = { delay = delay, spawn = spawn, wait = function(dt) return coroutine.yield(dt) end },
-    os = { clock = function() return now end }, require = function(module) return module.module end,
+    warn = function() end, os = { clock = function() return now end, time = function() return math.floor(1000 + now) end }, require = function(module) return module.module end,
     script = { Parent = serverFolder },
 }, { __index = _G })
+child(serverFolder, "ModuleScript", "ServerSettings").module = Settings
+child(serverFolder, "ModuleScript", "AdminPolicy").module = dofile("src/server/AdminPolicy.lua")
+child(serverFolder, "ModuleScript", "AdminService").module = assert(loadfile("src/server/AdminService.lua", "t", env))()
+child(serverFolder, "ModuleScript", "PlayerDataService").module = {
+    load = function(p) p:SetAttribute("DataMode", "Studio sandbox · not saved") return Schema.new() end,
+    release = function() return true end, step = function() end, shutdown = function() end,
+}
 assert(loadfile("src/server/Game.server.lua", "t", env))()
 local command = storage.FishingRemotes.Command
 local event = storage.FishingRemotes.Event
@@ -221,6 +249,7 @@ for _ = 1, 1800 do
 end
 check(caught == 1 and #lastProfile.bag == 1, "A successful server simulation awards exactly one fish")
 check(not originalHole.model.destroyed, "Catching preserves the same hole")
+check(lastProfile.xp > 0 and lastProfile.statistics.catches == 1 and lastProfile.bag[1].catchId, "Catches grant XP and persistent unique inventory records")
 check(humanoid.WalkSpeed == 16, "Landing a fish restores movement")
 -- Character reset cancels a new cast without deleting its hole.
 send("cast")
@@ -249,6 +278,7 @@ check(lastProfile.coins == beforeSale + saleValue, "Repeated NPC interaction can
 local clientFolder = instance("Folder")
 child(clientFolder, "ModuleScript", "EquipmentPreview").module = { mount = function() end, step = function() end }
 child(clientFolder, "ModuleScript", "AnglerAnimation").module = { start = function() end }
+child(clientFolder, "ModuleScript", "AdminMenu").module = assert(loadfile("src/client/AdminMenu.lua", "t", env))()
 env.script = { Parent = clientFolder }
 mode = "client"
 assert(loadfile("src/client/Game.client.lua", "t", env))()
@@ -271,11 +301,14 @@ check(not bound.FrostbiteReel and humanoid:GetStateEnabled("Jumping"), "Ending a
 check(not replacement.model.destroyed, "Client/server round trip still preserves the same hole")
 
 local guest = instance("Player")
-guest.UserId, guest.DisplayName, guest.Parent = 456, "GuestAngler", players
+guest.UserId, guest.DisplayName, guest.Parent = 456, "unbenator", players
+guest.Name = "GuestAngler"
+table.insert(playerList, guest)
 local guestCharacter = instance("Model")
 guestCharacter.Parent, guest.Character = character.Parent, guestCharacter
 local guestHumanoid = child(guestCharacter, "Humanoid")
 guestHumanoid.Health, guestHumanoid.WalkSpeed, guestHumanoid.JumpPower, guestHumanoid.JumpHeight, guestHumanoid.AutoRotate = 100, 16, 50, 7.2, true
+guestHumanoid.MaxHealth = 100
 local guestRoot = child(guestCharacter, "Part", "HumanoidRootPart")
 guestRoot.CFrame = cf(24, 5, 0)
 players.PlayerAdded:Fire(guest)
@@ -291,6 +324,53 @@ advance(Config.DrillDuration + 0.2)
 check(guest.leaderstats.Coins.Value == 120, "Each player has an isolated coin balance")
 send("cancel")
 check(humanoid.WalkSpeed == 16 and guestHumanoid.WalkSpeed == 0, "Cancelling one session does not cancel another player's session")
+local adminCommand = storage.FishingRemotes.AdminCommand
+local function admin(request, actor) advance(0.35) adminCommand.OnServerEvent:Fire(actor or player, request) end
+check(player:GetAttribute("IsAdmin") == true and guest:GetAttribute("IsAdmin") == false, "Only the server-resolved owner's user ID receives admin access")
+check(findText("ADMIN  [F2]"), "The admin menu is created for the authorized account")
+local guestCoins = guest.leaderstats.Coins.Value
+guest:SetAttribute("IsAdmin", true)
+admin({ action = "money", targetId = guest.UserId, amount = 500 }, guest)
+check(guest.leaderstats.Coins.Value == guestCoins, "Forging an IsAdmin attribute or display name cannot grant money")
+admin({ action = "money", targetId = guest.UserId, amount = -100 })
+check(guest.leaderstats.Coins.Value == guestCoins, "Invalid admin grant amounts leave the balance unchanged")
+admin({ action = "money", targetId = guest.UserId, amount = 500 })
+check(guest.leaderstats.Coins.Value == guestCoins + 500, "Authorized admin money grants update the target's authoritative profile")
+admin({ action = "xp", targetId = guest.UserId, amount = 205 })
+check(guest.leaderstats.Level.Value == 3, "Admin XP grants update the target's actual progression")
+admin({ action = "freeze", targetId = guest.UserId })
+check(guestRoot.Anchored and guest:GetAttribute("AdminFrozen") and guestHumanoid.WalkSpeed == 16, "Freeze cancels fishing before locking movement")
+admin({ action = "unfreeze", targetId = guest.UserId })
+check(not guestRoot.Anchored and not guest:GetAttribute("AdminFrozen"), "Unfreeze restores the character's prior anchoring state")
+admin({ action = "fly" })
+advance(0.1)
+check(player:GetAttribute("AdminFlying") and root:FindFirstChild("AdminFlightVelocity") and humanoid.PlatformStand, "Fly creates server-authorized flight constraints")
+check(bound.AdminFlightVertical, "Flight captures its vertical controls")
+send("cast")
+check(not character:GetAttribute("FishingStage"), "An admin cannot start fishing while flying")
+admin({ action = "fly" })
+advance(0.1)
+check(not player:GetAttribute("AdminFlying") and not root:FindFirstChild("AdminFlightVelocity") and not humanoid.PlatformStand, "Stopping flight cleans up constraints and restores the humanoid")
+check(not bound.AdminFlightVertical, "Stopping flight releases the input binding")
+guestHumanoid.Health = 10
+admin({ action = "heal", targetId = guest.UserId })
+check(guestHumanoid.Health == 100, "Heal restores the selected character's health")
+admin({ action = "bring", targetId = guest.UserId })
+check(guestRoot.Position.X == root.Position.X + 3, "Bring teleports the selected character near the admin")
+local guestX = guestRoot.Position.X
+admin({ action = "gotoPlayer", targetId = guest.UserId })
+check(root.Position.X == guestX + 3, "Go to player teleports the admin near the selected character")
+admin({ action = "pond" })
+check(root.Position.Z == -40, "The pond shortcut uses the approved destination")
+admin({ action = "shop" })
+check(root.Position.Z == -85, "The shop shortcut uses the approved destination")
+admin({ action = "respawn", targetId = guest.UserId })
+advance(0.1)
+check(guest.RespawnCount == 1, "Respawn invokes the selected player's character reload")
+admin({ action = "kick", targetId = player.UserId })
+check(not player.KickedReason, "Self-kick is refused")
+admin({ action = "kick", targetId = guest.UserId, reason = "Test reason" })
+check(guest.KickedReason == "Test reason", "Kick acts on the selected player with the supplied reason")
 players.PlayerRemoving:Fire(guest)
 check(guestHumanoid.WalkSpeed == 16, "Disconnect cleanup restores only the departing player's session")
 print("PASS: " .. checks .. " controller integration checks (Roblox API fakes; not engine validation)")

@@ -8,7 +8,7 @@ local function check(condition, message)
     count = count + 1
 end
 
-for tier = 1, 4 do
+for tier = 1, 5 do
     local seen = {}
     for i = 0, 9999 do
         local fish = Config.selectFish(tier, 2, i / 10000)
@@ -78,7 +78,7 @@ for category, items in pairs(Config.Gear) do
         table.insert(names, Config.gearName(category, item.id))
     end
 end
-check(Config.gearName("bait", "worms") == "Worms", "Bait labels omit pack quantities")
+check(Config.gearName("bait", "worms") == "Nightcrawlers", "Bait labels omit pack quantities")
 
 local hole = { ownerId = 123, tier = 1, size = 3 }
 local starterSpecies = 0
@@ -127,4 +127,4 @@ check(view.snapshot == current, "Stale packets cannot rewind the minigame")
 local localView = Reel.newView(packet(0, 0.5))
 Reel.viewStep(localView, 1 / 60, true, 1 / 60, Config.Fishing)
 check(localView.bar > 0.5, "Input responds before a server packet arrives")
-print("PASS: " .. count .. " gameplay checks, including 62,000 fish selections and reel simulations")
+print("PASS: " .. count .. " gameplay checks, including 72,000 fish selections and reel simulations")
