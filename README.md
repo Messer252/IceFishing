@@ -1,14 +1,16 @@
 # Frostbite Fishing
 
-A playable Roblox ice-fishing prototype: a snowy forest surrounds a frozen pond, and a lakeside tackle cabin sells equipment and buys your catches. All scenery and UI are generated from code; no paid models or external assets are required.
+An original Roblox ice-fishing development build: a snowy forest surrounds a frozen pond, and a lakeside tackle cabin sells equipment and buys your catches. All scenery and UI are generated from code; no paid models or external assets are required.
 
 ## Open in Roblox Studio
 
 1. Download/open `dist/FrostbiteFishing.rbxlx` in **Roblox Studio**. The file is generated in this workspace; rebuild it with `python3 tools/build_place.py` if needed.
 2. Press **Play** (F5), rather than Run. The server generates the map, and the local player receives the interface.
 3. Walk from the spawn onto the blue ice. Press **F** or tap **Drill / Cast** to drill a hole and cast. Later casts near your hole reuse it. Press **G / New Hole** to replace it, including when upgrading its size.
-4. Once a fish bites, **hold Space or the on-screen Reel button** to move your green zone right. Release to drift left. Keep the moving gold fish inside the zone until the catch meter fills. Too much line tension lets the fish escape.
+4. When a fish bites, **press Hook / Space / gamepad A** within the reaction window. Then **hold Space or the on-screen Reel button** to move your green zone right. Release to drift left. Keep the moving gold fish inside the zone until the catch meter fills. Too much line tension lets the fish escape.
 5. Return to the wooden cabin. Use its proximity prompt or press **B** nearby to open the shop. Sell fish at **Mara, the fish buyer**, or through the shop. Buy or equip better gear. **I** opens your fish bag anywhere.
+
+Use **J / Journal**, **K / Quests**, **M / Map**, **O / Settings**, **H / Guide**, or the field-kit tabs. Use **Gear** to equip items you already own. Trail boards let you unlock and travel to new lakes.
 
 You start with 120 coins, a hand auger, a starter rod, a plain hook, and unlimited bread bait. Bait packs are optional, so running out of coins cannot prevent fishing.
 
@@ -19,11 +21,15 @@ You start with 120 coins, a hand auger, a starter rod, a plain hook, and unlimit
 - Five rods: luck, control, strength, reel speed, and stability affect encounters and reeling.
 - Seven lures: permanent unlocks that improve fish odds.
 - Free bread and six consumable bait options with species preferences and faster bites, sold in packs of ten casts.
-- Eighteen fish species across Common, Uncommon, Rare, Epic, and Legendary tiers, with variable weights and sale prices. Five species are available with the starter auger.
+- Twenty-two fish species across Common, Uncommon, Rare, Epic, and Legendary tiers, with variable weights and sale prices. Five species are available with the starter auger.
 - Visible rods with reels and line guides; augers with spiral flights, blades, grips, and motor housings on powered tiers. Casting, waiting, and reeling have procedural R6/R15 character poses.
 - Rotating shop-card models plus an enlarged **3D View** for every rod, auger, bait, and lure. Drag to rotate; scroll to zoom. The cabin rack uses the same models.
 - Mounted, framed signs with surface lettering instead of floating text.
 - Locally predicted reel movement with smooth server reconciliation, rendered every frame. Space and gamepad A are captured during fishing; jumping is restored when it ends. Touch reeling uses a dedicated hold button.
+- Five physical lake regions, permanent trail unlocks, regional fish, docks, shelters, travel boards, a tutorial NPC, and a quest NPC.
+- Searchable/sortable inventory, individual sales, favorites and locks, a collection journal, records, eleven quests, milestone rewards, and a saved skippable tutorial.
+- Seven variant outcomes with server-rolled color/value modifiers, a hook reaction window, different fish struggle profiles, 3D catches and a landing effect.
+- Shared day/night/weather, local snowfall and aurora ribbons, meaningful environmental preferences, and saved accessibility/volume settings.
 - Shop level requirements, auto-equipping purchases, fish inventory, selling, coin/fish/level leaderboard, catch XP, and trophy/discovery bonuses.
 - Persistent coins, XP, gear, bait, fish, discoveries, and best weights in published servers; a visible level/XP HUD.
 - An admin menu for `unbenator`: F2 opens coin/XP grants, self flight, teleport/bring, freeze/unfreeze, heal, respawn, and kick controls.
@@ -32,11 +38,11 @@ You start with 120 coins, a hand auger, a starter rod, a plain hook, and unlimit
 
 ## Scope of this version
 
-**Published servers save progress. Studio defaults to a sandbox that does not save.** See [Phase 2 setup and testing](docs/PHASE2.md) for safe Studio persistence testing and admin configuration. Collections UI, quests, fish variants/models, audio, and additional regions remain future phases. The procedural equipment and character poses are functional prototype artwork, not finished authored animation assets.
+**Published servers save progress. Studio defaults to a sandbox that does not save.** See [Phase 2 setup and testing](docs/PHASE2.md) for safe Studio persistence testing and admin configuration. **Custom audio requires upload/configuration:** eleven original WAVs are included under `assets/audio`; safe UI-only placeholder sounds play until asset IDs are assigned. The generated models and poses are original procedural artwork, not finished artist-authored meshes or animation clips. [Release gates and current scope](docs/RELEASE.md) distinguish implementation from required Studio/live/device validation.
 
 Fishing holes are interactable gameplay objects displayed on solid ice: players cannot fall through them. One hole per player remains available through catches, cancellations, equipment purchases, and respawns. A nearby hole is reused by **F** or its proximity prompt; **G** deliberately replaces it. Its original tier determines eligible fish, so upgrading an auger requires drilling a new, larger hole to unlock that tier. Holes are cleaned up on disconnect. Completed and in-progress holes have spacing checks.
 
-The reel minigame is an original tracking mechanic. See [the development plan](docs/DEVELOPMENT.md) for staged scope and [Phase 2](docs/PHASE2.md) for saving/admin behavior and outstanding acceptance tests. YouTube could not be accessed from this workspace; the latest changes follow your written feedback and Studio screenshot.
+The reel minigame is an original tracking mechanic. See [the release guide](docs/RELEASE.md) for content, controls, asset setup, changed systems, and required production checks. [Phase 2](docs/PHASE2.md) documents saving/admin setup; the current schema is 3 and intentionally retains the same store names. YouTube could not be accessed from this workspace; the latest changes follow your written feedback and Studio screenshot.
 
 ## Develop
 
@@ -55,6 +61,17 @@ If you use [Rojo](https://rojo.space/), `default.project.json` maps the same sou
 | File | Purpose |
 | --- | --- |
 | `src/shared/Config.lua` | Equipment, prices, species, progression, and tuning |
+| `src/shared/Content.lua` | Regions, quests, variants, weather, tutorial, milestones |
+| `src/shared/ContentRules.lua` | Unlocks, settings, collection and tutorial rules |
+| `src/shared/Inventory.lua` | Sorting, protection flags, atomic sales |
+| `src/shared/QuestRules.lua` | Objective tracking and one-time claims |
+| `src/shared/NetworkGate.lua` | Per-player RPC budgets and cooldowns |
+| `src/shared/FishModels.lua` | Original procedural fish models |
+| `src/server/ContentService.lua` | Server content/inventory/travel actions |
+| `src/server/WorldExpansion.lua` | Additional lakes, outpost and travel/NPC interactions |
+| `src/server/EnvironmentService.lua` | Shared weather and clock |
+| `src/client/AdventureUI.lua` | Field-kit menus and catch cards |
+| `src/client/Feedback.lua` | Local snowfall, aurora and configured sound cues |
 | `src/shared/Progression.lua` | XP curve, levels, and progress |
 | `src/shared/FishGeneration.lua` | Encounter weight, difficulty, value, and trophies |
 | `src/server/PlayerDataService.lua` | Roblox persistence integration |
@@ -85,9 +102,11 @@ lua tests/gameplay.lua
 lua tests/runtime.lua
 lua tests/persistence.lua
 lua tests/phase2.lua
-# Or install this optional test runner outside the checkout:
-npm install --prefix /tmp/ice-fishing-validation --cache /tmp/ice-fishing-npm-cache --no-audit --no-fund fengari@0.1.5
-NODE_PATH=/tmp/ice-fishing-validation/node_modules node tools/run_lua_tests.cjs
+lua tests/content.lua
+# Or use the pinned Node-based offline runner:
+npm ci --prefix tools --no-audit --no-fund
+node tools/check_lua.cjs
+node tools/run_lua_tests.cjs
 ```
 
 **Roblox Studio is required for engine validation.** These checks have not been run in Studio:
@@ -108,4 +127,4 @@ NODE_PATH=/tmp/ice-fishing-validation/node_modules node tools/run_lua_tests.cjs
 - Try shop actions from far away and repeated clicks; verify no remote purchases or duplicate rewards occur.
 - Follow the [Phase 2 persistence/admin checklist](docs/PHASE2.md): test save/rejoin and owner/nonadmin permissions. Sandbox Studio sessions intentionally reset; Studio test saves and published-server profiles should restore.
 
-Do not publish as a finished live game until the Studio checks pass. Use **File → Publish to Roblox** from your own Roblox account when ready.
+Complete every gate in [the release checklist](docs/RELEASE.md) before publishing publicly. Use **File → Publish to Roblox** from your own Roblox account when ready.

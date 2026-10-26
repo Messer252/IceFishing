@@ -1,0 +1,26 @@
+name: Validate game source and place
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci --prefix tools --no-audit --no-fund
+      - run: node tools/check_lua.cjs
+      - run: node tools/run_lua_tests.cjs
+      - run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - run: python3 tools/build_place.py
+      - run: git diff --exit-code -- dist/FrostbiteFishing.rbxlx

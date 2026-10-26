@@ -2,6 +2,7 @@ local Config = {}
 
 Config.StartingCoins = 120
 Config.MaxCoins = 1000000000
+Config.MaxBait = 100000
 Config.Region = "Frostbite Pond"
 Config.Pond = { CenterX = 0, CenterZ = 0, Radius = 68, SurfaceY = 2 }
 Config.ShopPosition = { X = 0, Z = -92 }
@@ -71,6 +72,10 @@ Config.Fish = {
     { id = "laketrout", name = "Lake Trout", rarity = "Epic", tier = 4, weight = 3.2, value = 430, kg = 9, difficulty = 1.4, color = { 203, 148, 250 } },
     { id = "flathead", name = "Flathead Catfish", rarity = "Epic", tier = 4, weight = 2.1, value = 520, kg = 14, difficulty = 1.55, color = { 203, 148, 250 } },
     { id = "goldenwalleye", name = "Golden Walleye", rarity = "Legendary", tier = 5, weight = 0.8, value = 1150, kg = 6, difficulty = 1.75, color = { 248, 197, 92 } },
+    { id = "snowfin", name = "Whisperpine Snowfin", rarity = "Rare", tier = 3, weight = 5, value = 270, kg = 3.8, difficulty = 1.25, regionOnly = "lake", color = { 167, 221, 220 } },
+    { id = "glasskoi", name = "Glass Koi", rarity = "Epic", tier = 4, weight = 2.7, value = 590, kg = 7, difficulty = 1.5, regionOnly = "crystal", color = { 174, 232, 246 } },
+    { id = "tundragar", name = "Tundra Gar", rarity = "Epic", tier = 4, weight = 2.3, value = 640, kg = 14, difficulty = 1.65, regionOnly = "north", color = { 144, 190, 161 } },
+    { id = "leviathan", name = "Glacier Leviathan", rarity = "Legendary", tier = 5, weight = 0.6, value = 2200, kg = 34, difficulty = 1.95, regionOnly = "glacier", color = { 179, 158, 249 } },
 }
 
 local rodStats = {
@@ -94,9 +99,12 @@ local preferences = {
 for _, fish in ipairs(Config.Fish) do
     fish.minWeight, fish.maxWeight = math.floor(fish.kg * 0.65 * 100 + 0.5) / 100, math.floor(fish.kg * 1.5 * 100 + 0.5) / 100
     fish.xp = 16 + fish.tier * 8
-    fish.preferredBait = preferences[fish.id]
+    fish.preferredBait = preferences[fish.id] or "premium"
     fish.preferredLure = fish.tier >= 3 and "predator" or "soft"
-    fish.location, fish.preferredWeather, fish.preferredTime = "pond", "Clear", fish.tier >= 3 and "Night" or "Day"
+    fish.behavior = ({ "drift", "sweep", "burst", "heavy", "mythic" })[fish.tier]
+    fish.preferredRegion = fish.regionOnly or ({ "pond", "lake", "north", "crystal", "glacier" })[fish.tier]
+    fish.style = (fish.id == "flathead" or fish.id == "burbot") and "catfish" or (fish.tier >= 3 and "predator" or "panfish")
+    fish.location, fish.preferredWeather, fish.preferredTime = fish.regionOnly or "pond", ({ "Clear", "LightSnow", "HeavySnow", "Blizzard", "Aurora" })[fish.tier], fish.tier >= 3 and "Night" or "Day"
 end
 
 function Config.reelSettings(rod)
@@ -135,18 +143,29 @@ function Config.weightFor(fish, luck, context)
     local preference = 1
     if context and context.bait == fish.preferredBait then preference = preference * 1.5 end
     if context and context.lure == fish.preferredLure then preference = preference * 1.25 end
+    if context and context.region == fish.preferredRegion then preference = preference * 2 end
+    if context and context.weather == fish.preferredWeather then preference = preference * 1.15 end
+    if context and context.night ~= nil and (context.night and "Night" or "Day") == fish.preferredTime then preference = preference * 1.25 end
     return fish.weight * (1 + math.max(0, luck) * quality * 0.75) * preference
+end
+
+function Config.findFish(id)
+    for _, fish in ipairs(Config.Fish) do if fish.id == id then return fish end end
+    return nil
+end
+function Config.available(fish, tier, context)
+    return fish.tier <= tier and (not context or not context.region or not fish.regionOnly or fish.regionOnly == context.region)
 end
 
 -- Accepts an injected [0, 1) roll to make the selection logic testable.
 function Config.selectFish(tier, luck, roll, context)
     local total = 0
     for _, fish in ipairs(Config.Fish) do
-        if fish.tier <= tier then total = total + Config.weightFor(fish, luck, context) end
+        if Config.available(fish, tier, context) then total = total + Config.weightFor(fish, luck, context) end
     end
     local target = math.max(0, math.min(0.999999, roll)) * total
     for _, fish in ipairs(Config.Fish) do
-        if fish.tier <= tier then
+        if Config.available(fish, tier, context) then
             target = target - Config.weightFor(fish, luck, context)
             if target < 0 then return fish end
         end

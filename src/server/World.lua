@@ -205,4 +205,20 @@ function World.drilling(parent, position)
     return source
 end
 
+function World.catchEffect(parent, position, catch)
+    local FishModels = require(game:GetService("ReplicatedStorage").Shared.FishModels)
+    local model = FishModels.build(catch.species, catch.color)
+    model:ScaleTo(math.min(0.8, 0.35 + catch.kg ^ 0.25 * 0.08))
+    model.Parent = parent
+    local value = Instance.new("CFrameValue")
+    value.Value, value.Parent = CFrame.new(position + Vector3.new(0, 0.4, 0)), model
+    model:PivotTo(value.Value)
+    local connection = value.Changed:Connect(function(cf) if model.Parent then model:PivotTo(cf) end end)
+    model.Destroying:Connect(function() connection:Disconnect() end)
+    local tween = TweenService:Create(value, TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Value = CFrame.new(position + Vector3.new(0, 3.5, 0)) * CFrame.Angles(0, 0, math.rad(65)) })
+    tween.Completed:Connect(function() model:Destroy() end)
+    tween:Play()
+    game:GetService("Debris"):AddItem(model, 1.2)
+end
+
 return World

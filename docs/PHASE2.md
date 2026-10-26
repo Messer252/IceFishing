@@ -1,5 +1,7 @@
 # Phase 2: progression, saving, and administration
 
+This documents the Phase 2 baseline. The newer build uses schema 3 in the same existing store namespaces and implements the content described in [the release guide](RELEASE.md).
+
 The user authorized Phase 2 after the Phase 1 code update. This implementation preserves the existing map, drilling/casting/reeling loop, reusable holes, and 3D equipment workflow. Roblox Studio acceptance testing from Phase 1 remains outstanding; advancing the implementation does not establish that gate passed.
 
 ## Implemented systems

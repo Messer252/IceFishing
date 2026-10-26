@@ -13,6 +13,8 @@ function Animation.start()
             if character then
                 seen[character] = true
                 local stage = character:GetAttribute("FishingStage")
+                local resultAt = character:GetAttribute("FishingResultAt") or -100
+                if not stage and character:GetAttribute("FishingResult") == "caught" and workspace:GetServerTimeNow() - resultAt < 0.8 then stage = "landing" end
                 local rig = rigs[character]
                 if stage and not rig then
                     rig = { motors = {}, blend = 0 }
@@ -28,10 +30,10 @@ function Animation.start()
                 if rig then
                     local alpha = 1 - math.exp(-14 * math.min(dt, 0.1))
                     rig.blend = rig.blend + ((stage and 1 or 0) - rig.blend) * alpha
-                    local t = workspace:GetServerTimeNow() - (character:GetAttribute("FishingStageAt") or 0)
+                    local t = workspace:GetServerTimeNow() - (stage == "landing" and resultAt or character:GetAttribute("FishingStageAt") or 0)
                     local drilling, reeling = stage == "drilling", stage == "reeling"
                     local cycle = math.sin(t * (drilling and 10 or reeling and 9 or 2))
-                    local lift = drilling and 78 or (stage == "casting" and (62 + math.sin(math.min(t / 0.8, 1) * math.pi) * 30) or 58)
+                    local lift = stage == "landing" and (65 + math.sin(t / 0.8 * math.pi) * 35) or (stage == "hooking" and 85) or drilling and 78 or (stage == "casting" and (62 + math.sin(math.min(t / 0.8, 1) * math.pi) * 30) or 58)
                     for _, entry in ipairs(rig.motors) do
                         local m, pose = entry.motor, CFrame.new()
                         if m.Parent then

@@ -2,9 +2,12 @@ local Reel = {}
 
 local function clamp(x, lo, hi) return math.max(lo, math.min(hi, x)) end
 
-function Reel.target(phase, difficulty, elapsed)
-    return 0.5 + math.sin(elapsed * difficulty * 1.25 + phase) * 0.26
-        + math.sin(elapsed * difficulty * 2.1 + phase * 0.7) * 0.10
+function Reel.target(phase, difficulty, elapsed, behavior)
+    local frequency = behavior == "heavy" and 0.8 or behavior == "burst" and 1.5 or 1.25
+    local amplitude = behavior == "heavy" and 0.23 or 0.26
+    local pulse = (behavior == "burst" or behavior == "mythic") and math.sin(elapsed * 0.9 + phase) ^ 7 * 0.045 or 0
+    return 0.5 + math.sin(elapsed * difficulty * frequency + phase) * amplitude
+        + math.sin(elapsed * difficulty * 2.1 + phase * 0.7) * 0.10 + pulse
 end
 
 -- Exact integration of a responding velocity keeps behavior independent of FPS.
@@ -22,7 +25,7 @@ end
 -- Only the server uses the outcome to award a catch.
 function Reel.step(state, dt, held, fish, settings, elapsed)
     Reel.moveBar(state, dt, held, settings)
-    state.target = Reel.target(state.phase, fish.difficulty, elapsed)
+    state.target = Reel.target(state.phase, fish.difficulty, elapsed, fish.behavior)
     local inside = math.abs(state.bar - state.target) <= state.width / 2
     state.progress = clamp(state.progress + (inside and settings.Gain or -settings.Loss) * dt, 0, 1)
     state.tension = clamp(state.tension + (inside and -settings.TensionLoss or settings.TensionGain) * dt, 0, 1)
@@ -58,7 +61,7 @@ function Reel.viewStep(view, dt, held, now, settings)
     view.progress = view.progress + (snapshot.progress - view.progress) * alpha
     view.tension = view.tension + (snapshot.tension - view.tension) * alpha
     view.target = Reel.target(snapshot.phase, snapshot.difficulty,
-        snapshot.elapsed + math.max(0, now - snapshot.serverTime))
+        snapshot.elapsed + math.max(0, now - snapshot.serverTime), snapshot.behavior)
     return view
 end
 

@@ -32,7 +32,11 @@ def build(destination=None):
     root = ET.Element("roblox", {"version": "4"})
     ET.SubElement(root, "External").text = "null"
     ET.SubElement(root, "External").text = "nil"
-    item(root, "Workspace", "Workspace")
+    workspace = item(root, "Workspace", "Workspace")
+    props = workspace.find("Properties")
+    ET.SubElement(props, "bool", {"name": "StreamingEnabled"}).text = "true"
+    ET.SubElement(props, "int", {"name": "StreamingMinRadius"}).text = "64"
+    ET.SubElement(props, "int", {"name": "StreamingTargetRadius"}).text = "192"
     storage = item(root, "ReplicatedStorage", "ReplicatedStorage")
     scripts(item(storage, "Folder", "Shared"), ROOT / "src/shared")
     server = item(root, "ServerScriptService", "ServerScriptService")

@@ -7,10 +7,11 @@ function FishGeneration.roll(config, tier, luck, context, random)
     local kg = math.max(species.minWeight, math.min(species.maxWeight, math.floor(rawWeight * 100 + 0.5) / 100))
     local strength = context.strength or 6
     local resistance = 1 + math.max(0, kg / strength - 1) * 0.12
-    return { id = species.id, name = species.name, rarity = species.rarity, tier = species.tier,
-        kg = kg, value = math.max(1, math.floor(species.value * kg / species.kg)),
+    local variant = context.variant or { name = "Normal", multiplier = 1 }
+    return { variant = variant.name, id = species.id, name = species.name, rarity = species.rarity, tier = species.tier,
+        kg = kg, value = math.max(1, math.floor(species.value * kg / species.kg * variant.multiplier)),
         difficulty = math.min(2.15, species.difficulty * (0.9 + weightRoll * 0.2) * resistance),
-        xp = species.xp, color = species.color, trophy = weightRoll >= 0.95 }
+        xp = species.xp, behavior = species.behavior, color = variant.color or species.color, trophy = weightRoll >= 0.95 }
 end
 
 return FishGeneration

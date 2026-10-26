@@ -83,6 +83,9 @@ function Admin.start(context)
             status(actor, "That action is protected for other admins.") return
         end
         local profile = context.profiles[target]
+        if target:GetAttribute("Traveling") and action ~= "money" and action ~= "xp" and action ~= "kick" then
+            status(actor, "That player's trail is loading. Try again in a moment.") return
+        end
         if action == "money" or action == "xp" then
             if not profile or target:GetAttribute("ProfileReady") ~= true then status(actor, "That player's saved profile is not ready.") return end
             if action == "money" then

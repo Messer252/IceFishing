@@ -31,11 +31,12 @@ function AdminMenu.start(gui, remotes)
         round(object) return object
     end
     local overlay = make("Frame", gui, { Name = "AdminOverlay", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.3, BorderSizePixel = 0, Visible = false, ZIndex = 10 })
-    local panel = make("Frame", overlay, { Size = UDim2.fromOffset(680, 560), Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = navy, BorderSizePixel = 0 })
+    local panel = make("ScrollingFrame", overlay, { Name = "AdminPanel", Size = UDim2.fromOffset(680, 560), CanvasSize = UDim2.fromOffset(0, 560), ScrollBarThickness = 4,
+        ScrollingDirection = Enum.ScrollingDirection.Y, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = navy, BorderSizePixel = 0 })
     round(panel)
     local scale = make("UIScale", panel, { Scale = 1 })
-    text(panel, "FROSTBITE / ADMIN", UDim2.fromOffset(520, 34), UDim2.fromOffset(20, 14), 22).Font = Enum.Font.GothamBold
-    text(panel, "Manage players in this server", UDim2.fromOffset(530, 24), UDim2.fromOffset(20, 49), 13)
+    text(panel, "FROSTBITE / ADMIN", UDim2.new(1, -80, 0, 34), UDim2.fromOffset(20, 14), 22).Font = Enum.Font.GothamBold
+    text(panel, "Manage players in this server", UDim2.new(1, -40, 0, 24), UDim2.fromOffset(20, 49), 13)
     button(panel, "X", UDim2.fromOffset(36, 34), UDim2.new(1, -56, 0, 16), function() overlay.Visible = false end, gold)
     local selected, confirm = nil, nil
     local selection = text(panel, "Select a player", UDim2.fromOffset(415, 32), UDim2.fromOffset(245, 88), 17)
@@ -63,16 +64,17 @@ function AdminMenu.start(gui, remotes)
         { "Give coins", "money" }, { "Give XP", "xp" }, { "Go to player", "gotoPlayer" }, { "Bring player", "bring" },
         { "Freeze", "freeze" }, { "Unfreeze", "unfreeze" }, { "Heal", "heal" }, { "Respawn", "respawn", true }, { "Kick", "kick", true },
     }
+    local actionButtons = {}
     for i, action in ipairs(actions) do
         local column, row = (i - 1) % 2, math.floor((i - 1) / 2)
-        button(panel, action[1], UDim2.fromOffset(198, 34), UDim2.fromOffset(245 + column * 212, 222 + row * 43), function()
+        actionButtons[i] = button(panel, action[1], UDim2.fromOffset(198, 34), UDim2.fromOffset(245 + column * 212, 222 + row * 43), function()
             request(action[2], true, action[3])
         end, action[2] == "kick" and Color3.fromRGB(241, 144, 139) or mint)
     end
     local flyButton = button(panel, "Fly: OFF", UDim2.fromOffset(130, 34), UDim2.fromOffset(245, 446), function() request("fly") end, gold)
-    button(panel, "To pond", UDim2.fromOffset(130, 34), UDim2.fromOffset(385, 446), function() request("pond") end, gold)
-    button(panel, "To shop", UDim2.fromOffset(130, 34), UDim2.fromOffset(525, 446), function() request("shop") end, gold)
-    button(panel, "Refresh players", UDim2.fromOffset(205, 30), UDim2.fromOffset(20, 451), function() request("roster") end, gold)
+    local pondButton = button(panel, "To pond", UDim2.fromOffset(130, 34), UDim2.fromOffset(385, 446), function() request("pond") end, gold)
+    local shopButton = button(panel, "To shop", UDim2.fromOffset(130, 34), UDim2.fromOffset(525, 446), function() request("shop") end, gold)
+    local refreshButton = button(panel, "Refresh players", UDim2.fromOffset(205, 30), UDim2.fromOffset(20, 451), function() request("roster") end, gold)
     local function toggle()
         if not player:GetAttribute("IsAdmin") then return end
         overlay.Visible = not overlay.Visible
@@ -120,9 +122,34 @@ function AdminMenu.start(gui, remotes)
         if input == downPointer or input.UserInputType == Enum.UserInputType.MouseButton1 then downPointer = nil end
     end)
     UserInputService.WindowFocusReleased:Connect(function() up, down, upPointer, downPointer = false, false, nil, nil end)
+    local lastViewport = Vector2.zero
     RunService.RenderStepped:Connect(function()
         local camera = workspace.CurrentCamera
-        if camera then scale.Scale = math.min(1, (camera.ViewportSize.X - 20) / 680, (camera.ViewportSize.Y - 60) / 560) end
+        if camera and camera.ViewportSize ~= lastViewport then
+            lastViewport = camera.ViewportSize
+            local mobile = lastViewport.X < 680
+            local width, height = math.min(680, lastViewport.X - 20), math.min(mobile and 760 or 560, lastViewport.Y - 60)
+            panel.Size, scale.Scale = UDim2.fromOffset(width, height), 1
+            panel.CanvasSize = UDim2.fromOffset(0, mobile and 760 or 560)
+            rosterList.Size = mobile and UDim2.new(1, -40, 0, 120) or UDim2.fromOffset(205, 355)
+            selection.Size = UDim2.new(1, mobile and -40 or -265, 0, 32)
+            selection.Position = UDim2.fromOffset(mobile and 20 or 245, mobile and 219 or 88)
+            amount.Size, reason.Size = UDim2.new(1, mobile and -40 or -270, 0, 36), UDim2.new(1, mobile and -40 or -270, 0, 36)
+            amount.Position, reason.Position = UDim2.fromOffset(mobile and 20 or 245, mobile and 258 or 128), UDim2.fromOffset(mobile and 20 or 245, mobile and 302 or 174)
+            for i, object in ipairs(actionButtons) do
+                local column, row = (i - 1) % 2, math.floor((i - 1) / 2)
+                local buttonWidth = mobile and (width - 52) / 2 or 198
+                object.Size = UDim2.fromOffset(buttonWidth, 34)
+                object.Position = UDim2.fromOffset((mobile and 20 or 245) + column * (buttonWidth + 14), (mobile and 347 or 222) + row * 43)
+            end
+            for i, object in ipairs({ flyButton, pondButton, shopButton }) do
+                local buttonWidth = mobile and (width - 60) / 3 or 130
+                object.Size = UDim2.fromOffset(buttonWidth, 34)
+                object.Position = UDim2.fromOffset((mobile and 20 or 245) + (i - 1) * (buttonWidth + 10), mobile and 576 or 446)
+            end
+            refreshButton.Position = UDim2.fromOffset(20, mobile and 624 or 451)
+            result.Position = UDim2.fromOffset(20, mobile and 672 or 492)
+        end
         local enabled = player:GetAttribute("IsAdmin") == true and player:GetAttribute("AdminFlying") == true
         flyButton.Text, flightHud.Visible = enabled and "Fly: ON" or "Fly: OFF", enabled
         if enabled and not flightBound then

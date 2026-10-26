@@ -19,7 +19,7 @@ for _, name in ipairs(expected) do
     check(found, "Missing species: " .. name)
 end
 for _, fish in ipairs(Config.Fish) do
-    check(fish.minWeight > 0 and fish.maxWeight > fish.minWeight and fish.xp > 0 and fish.location == "pond", "Fish definitions include bounded weights, XP and location")
+    check(fish.minWeight > 0 and fish.maxWeight > fish.minWeight and fish.xp > 0 and type(fish.location) == "string", "Fish definitions include bounded weights, XP and location")
     check(Config.findGear("bait", fish.preferredBait) ~= nil, "Preferred bait exists")
 end
 for _, auger in ipairs(Config.Gear.auger) do

@@ -22,8 +22,9 @@ local store = not sandbox and PlayerStore.new({
         local player = Players:GetPlayerByUserId(id)
         if player then player:SetAttribute("ProfileReady", false) player:Kick("Your saved session could not be kept safe. Please rejoin.") end
     end,
-    onError = function(id)
-        warn("[PlayerData] Save delayed for user " .. id .. "; retrying before the session lease expires.")
+    onError = function(id, reason)
+        if reason == "ownership" then warn("[PlayerData] Final save refused for " .. id .. ": ownership expired or changed; stored data was protected.")
+        else warn("[PlayerData] Save delayed for user " .. id .. "; retrying before the session lease expires.") end
     end,
 }) or nil
 

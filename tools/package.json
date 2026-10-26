@@ -1,0 +1,10 @@
+{
+  "name": "frostbite-validation",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Offline Lua logic tests and syntax checks; no Roblox runtime dependency",
+  "dependencies": {
+    "fengari": "0.1.5",
+    "luaparse": "0.3.1"
+  }
+}

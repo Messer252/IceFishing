@@ -9,11 +9,13 @@ local function fixture()
     local state = { now = 100, records = {}, failures = 0, calls = 0, lost = {}, errors = {} }
     local api = {}
     function api:UpdateAsync(key, fn)
+        if state.yieldFirst then state.yieldFirst = false coroutine.yield("waiting") end
         state.calls = state.calls + 1
         if state.failures > 0 then state.failures = state.failures - 1 error("Injected DataStore outage") end
         local result = fn(clone(state.records[key]))
         if state.retryTransform then result = fn(clone(state.records[key])) end
         if result ~= nil then state.records[key] = clone(result) end
+        if state.failAfterCommit then state.failAfterCommit = false error("Injected lost write acknowledgement") end
         return clone(result)
     end
     function state.client(token)
@@ -74,7 +76,7 @@ j.records.player_4 = { version = 99, data = { coins = 700 } }
 check(not j.client("J"):load(4) and j.records.player_4.version == 99, "Future schemas are refused without overwriting them")
 j.records.player_5 = { version = 1, data = { coins = 321, bag = {}, owned = { rod = { carbon = true } }, equipped = { rod = "carbon" } } }
 local migrated = j.client("M"):load(5)
-check(migrated and migrated.schemaVersion == 2 and migrated.coins == 321 and migrated.owned.rod.carbon, "Legacy profiles migrate without losing valid equipment or currency")
+check(migrated and migrated.schemaVersion == 3 and migrated.coins == 321 and migrated.owned.rod.carbon, "Legacy profiles migrate without losing valid equipment or currency")
 local bad = Schema.new()
 bad.coins = 0 / 0
 j.records.player_6 = { version = 2, data = bad }
@@ -116,4 +118,74 @@ check(leaving.entries[12].releasePending, "A failed leave save stays queued for 
 r.now = r.now + 11
 leaving:step()
 check(not leaving.entries[12] and r.records.player_12.data.coins == 456 and not r.records.player_12.lease, "A recovered leave-save retry commits the final balance and releases the lease")
+
+local overlap = fixture()
+local owner = overlap.client("one-server")
+overlap.yieldFirst = true
+local load = coroutine.create(function() return owner:load(20) end)
+local resumed, paused = coroutine.resume(load)
+check(resumed and paused == "waiting" and owner.loading[20], "In-flight loads reserve the account before yielding")
+check(not owner:load(20), "Rapid same-server rejoins cannot start a competing load for one user ID")
+local finished, data = coroutine.resume(load)
+check(finished and data.coins == 120 and not owner.loading[20], "The original load completes and clears its reservation")
+
+local original = owner.entries[20]
+original.busy = true
+local replacement
+owner.options.wait = function(dt)
+    overlap.now = overlap.now + dt
+    original.busy = false
+    -- Another release has completed, then the same account rejoined.
+    overlap.records.player_20.lease = nil
+    owner.entries[20] = nil
+    replacement = assert(owner:load(20))
+    replacement.coins = 777
+end
+check(owner:release(20), "A superseded release finishes without touching its replacement")
+check(owner.entries[20] and owner.entries[20].data == replacement and owner.entries[20].data.coins == 777,
+    "An older cleanup cannot release a newly loaded profile")
+
+local queued = fixture()
+local queueOwner = queued.client("queued")
+local tasks = {}
+queueOwner.options.spawn = function(fn) table.insert(tasks, fn) end
+queueOwner:load(21)
+queued.now = queued.now + 80
+queueOwner:step()
+check(#tasks == 1, "Autosave work captures the exact profile it was scheduled for")
+queueOwner:release(21)
+local currentData = assert(queueOwner:load(21))
+currentData.coins = 888
+local calls = queued.calls
+tasks[1]()
+check(queued.calls == calls and queueOwner.entries[21].data == currentData,
+    "A stale queued autosave cannot write a replacement session")
+
+local acknowledged = fixture()
+local retryOwner = acknowledged.client("acknowledgement")
+retryOwner:load(22).coins = 555
+acknowledged.failAfterCommit = true
+check(retryOwner:release(22), "A release that committed before a response timeout is safely recognized on retry")
+check(acknowledged.records.player_22.data.coins == 555 and not acknowledged.records.player_22.lease and not retryOwner.entries[22],
+    "Write receipts prevent a lost acknowledgement from corrupting or duplicating the final save")
+
+local recovery = fixture()
+local recovering = recovery.client("recovering")
+recovering:load(23).coins = 606
+recovery.now = recovering.entries[23].leaseUntil - 4
+recovering:step()
+check(recovery.lost[23] and recovering:release(23) and recovery.records.player_23.data.coins == 606,
+    "A departing session can finish a verified final save before its lease expires")
+local expired = recovery.client("expired")
+expired:load(24)
+recovery.now = recovery.now + 181
+expired:step()
+check(not expired:release(24) and not expired.entries[24], "An expired profile cannot write but its retired local entry does not block a later rejoin")
+check(expired:load(24) ~= nil, "A fresh session can reacquire the safely expired account")
+local shutdownFailure = fixture()
+local losing = shutdownFailure.client("lost-final")
+losing:load(25)
+shutdownFailure.now = shutdownFailure.now + 181
+losing:step()
+check(not losing:shutdown(), "Shutdown does not report success for an unconfirmed expired final save")
 print("PASS: " .. checks .. " persistence fault-injection checks (fake DataStore)")

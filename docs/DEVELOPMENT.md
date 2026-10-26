@@ -50,3 +50,9 @@ The user explicitly authorized proceeding to Phase 2. See [Phase 2 progression, 
 5. **Phase 5 — production validation:** failure/reconnect tests for persistence, remote abuse/replay tests, multi-client performance tests targeting 10–15 players, profiling on low-end devices, progression balancing, and deployment checks.
 
 Keep additional lakes behind the starter-loop acceptance gate. Preserve working systems; extract services when their responsibilities grow rather than replacing the project with a monolithic script. User-facing controls must perform real actions. Missing assets and untested capabilities must remain clearly labeled.
+
+## Remaining-phase implementation
+
+The user authorized all remaining phases. The current build adds the content, environment, inventory, journal, quests, regions, variants, tutorial, procedural fish/landing visuals, settings, audio source pack, responsive menus, network hardening, CI workflow and migration tests described in [the release guide](RELEASE.md). Schema 3 preserves existing Phase 2 data and store names.
+
+Phase 5 remains **pending external acceptance**, not certified complete: Studio rendering/physics, real DataStore/owner checks, asset upload, real device and 10–15-player performance tests cannot be performed in this cloud machine. Follow the release matrix for the concrete remaining steps. Optional later features (trading, vehicles, seasonal events, Robux products) were not treated as required phase deliverables.

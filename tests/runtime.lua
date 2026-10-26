@@ -1,5 +1,10 @@
 -- Execute the real server and client controllers against small Roblox API fakes.
 -- These regressions verify event/lifecycle logic, not rendering or engine physics.
+local Content = dofile("src/shared/Content.lua")
+local ContentRules = dofile("src/shared/ContentRules.lua")
+local Inventory = dofile("src/shared/Inventory.lua")
+local QuestRules = dofile("src/shared/QuestRules.lua")
+local NetworkGate = dofile("src/shared/NetworkGate.lua")
 local Config = dofile("src/shared/Config.lua")
 local Reel = dofile("src/shared/Reel.lua")
 local HoleRules = dofile("src/shared/HoleRules.lua")
@@ -82,6 +87,7 @@ function methods:Destroy()
     rawset(self, "destroyed", true)
     self.Parent = nil
 end
+function methods:GetPropertyChangedSignal(name) return self:GetAttributeChangedSignal("property_" .. name) end
 function methods:GetAttributeChangedSignal(name)
     self.attributeSignals = self.attributeSignals or {}
     self.attributeSignals[name] = self.attributeSignals[name] or signal()
@@ -94,6 +100,10 @@ function methods:SetAttribute(name, value)
 end
 function methods:Kick(reason) self.KickedReason = reason end
 function methods:LoadCharacterAsync() self.RespawnCount = (self.RespawnCount or 0) + 1 end
+function methods:RequestStreamAroundAsync(position)
+    self.LastStreamRequest = position
+    if self.FailStreamRequest then error("Injected streaming failure") end
+end
 function methods:GetAttribute(name) return self.attributes[name] end
 function methods:SetStateEnabled(_, value) self["stateEnabled_" .. mode] = value end
 function methods:GetStateEnabled() return self["stateEnabled_" .. mode] ~= false end
@@ -157,6 +167,7 @@ function World.build()
     worldState.sellPrompt = instance("ProximityPrompt")
     return instance("Folder"), instance("ProximityPrompt"), worldState.sellPrompt
 end
+function World.catchEffect() worldState.catchEffects = (worldState.catchEffects or 0) + 1 end
 function World.drilling() return instance("Part") end
 function World.hole(_, position, size)
     local model = instance("Model")
@@ -173,13 +184,14 @@ function Equipment.mount(anglerCharacter, category, id)
     return model, instance("Motor6D"), cf()
 end
 local shared = child(storage, "Folder", "Shared")
-for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment, Progression = Progression, FishGeneration = FishGeneration }) do
+for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment, Progression = Progression, FishGeneration = FishGeneration, Content = Content, ContentRules = ContentRules, Inventory = Inventory, QuestRules = QuestRules, NetworkGate = NetworkGate }) do
     local m = child(shared, "ModuleScript", name)
     m.module = module
 end
 local serverFolder = instance("Folder")
 child(serverFolder, "ModuleScript", "World").module = World
-local workspaceFake = { GetServerTimeNow = function() return now end }
+local workspaceFake = instance("Workspace")
+function workspaceFake:GetServerTimeNow() return now end
 local bound = {}
 local context = {}
 function context:BindActionAtPriority(name, fn, _, priority) bound[name] = { fn = fn, priority = priority } end
@@ -188,21 +200,26 @@ local input = { InputBegan = signal(), InputEnded = signal(), InputChanged = sig
 local enums = setmetatable({ ContextActionPriority = { High = { Value = 3000 } } }, { __index = function(t, k)
     local values = setmetatable({}, { __index = function(_, n) return n end }) rawset(t, k, values) return values
 end })
-local services = { Players = players, ReplicatedStorage = storage, RunService = { Heartbeat = heartbeat, RenderStepped = render, IsStudio = function() return true end },
+local services = { Lighting = instance("Lighting"), TweenService = { Create = function(_, object, _, properties) return { Play = function() for key, value in pairs(properties) do object[key] = value end end } end }, Players = players, ReplicatedStorage = storage, RunService = { Heartbeat = heartbeat, RenderStepped = render, IsStudio = function() return true end },
     HttpService = { GenerateGUID = function() return tostring(now) end }, UserInputService = input, ContextActionService = context }
 local env = setmetatable({
     game = { BindToClose = function(_, fn) worldState.shutdown = fn end, GetService = function(_, name) return assert(services[name], "Missing service " .. name) end },
     workspace = workspaceFake, Instance = { new = instance }, Enum = enums,
     Vector3 = { new = vec, zero = vec() }, Vector2 = { new = vec, zero = vec() }, CFrame = { new = cf, Angles = function() return cf() end, lookAt = function(position) return cf(position) end },
+    TweenInfo = { new = function() return {} end },
+    table = setmetatable({ find = function(list, item) for i, value in ipairs(list) do if value == item then return i end end end }, { __index = table }),
     Color3 = { new = vec, fromRGB = vec }, UDim = { new = function(...) return { ... } end },
     UDim2 = { new = function(...) return { ... } end, fromOffset = function(...) return { ... } end, fromScale = function(...) return { ... } end },
     Random = { new = function() return { NextNumber = function(_, lo, hi) if not lo then return 0.1 end return (lo + hi) / 2 end } end },
     task = { delay = delay, spawn = spawn, wait = function(dt) return coroutine.yield(dt) end },
-    warn = function() end, os = { clock = function() return now end, time = function() return math.floor(1000 + now) end }, require = function(module) return module.module end,
+    warn = function() end, os = { date = os.date, clock = function() return now end, time = function() return math.floor(1000 + now) end }, require = function(module) return module.module end,
     script = { Parent = serverFolder },
 }, { __index = _G })
 child(serverFolder, "ModuleScript", "ServerSettings").module = Settings
 child(serverFolder, "ModuleScript", "AdminPolicy").module = dofile("src/server/AdminPolicy.lua")
+child(serverFolder, "ModuleScript", "WorldExpansion").module = { build = function() return {} end }
+child(serverFolder, "ModuleScript", "EnvironmentService").module = assert(loadfile("src/server/EnvironmentService.lua", "t", env))()
+child(serverFolder, "ModuleScript", "ContentService").module = assert(loadfile("src/server/ContentService.lua", "t", env))()
 child(serverFolder, "ModuleScript", "AdminService").module = assert(loadfile("src/server/AdminService.lua", "t", env))()
 child(serverFolder, "ModuleScript", "PlayerDataService").module = {
     load = function(p) p:SetAttribute("DataMode", "Studio sandbox · not saved") return Schema.new() end,
@@ -212,8 +229,12 @@ assert(loadfile("src/server/Game.server.lua", "t", env))()
 local command = storage.FishingRemotes.Command
 local event = storage.FishingRemotes.Event
 local lastProfile, lastBite, lastStage, caught = nil, nil, nil, 0
+local autoHook, lastHook = true, nil
 event.OnClientEvent:Connect(function(kind, data)
     if kind == "profile" then lastProfile = data elseif kind == "bite" then lastBite = data
+    elseif kind == "hook" then
+        lastHook = data
+        if autoHook then delay(0.05, function() command.OnServerEvent:Fire(player, "input", { token = data.token, held = true }) end) end
     elseif kind == "stage" then lastStage = data elseif kind == "caught" then caught = caught + 1 end
 end)
 local function send(action, data) advance(0.3) command.OnServerEvent:Fire(player, action, data) end
@@ -276,10 +297,13 @@ worldState.sellPrompt.Triggered:Fire(player)
 check(lastProfile.coins == beforeSale + saleValue, "Repeated NPC interaction cannot sell the same fish twice")
 -- Run actual client GUI construction and profile handling (including HUD bug).
 local clientFolder = instance("Folder")
-child(clientFolder, "ModuleScript", "EquipmentPreview").module = { mount = function() end, step = function() end }
+child(clientFolder, "ModuleScript", "EquipmentPreview").module = { mount = function() end, fish = function() end, step = function() end }
 child(clientFolder, "ModuleScript", "AnglerAnimation").module = { start = function() end }
 child(clientFolder, "ModuleScript", "AdminMenu").module = assert(loadfile("src/client/AdminMenu.lua", "t", env))()
 env.script = { Parent = clientFolder }
+child(clientFolder, "ModuleScript", "Ui").module = assert(loadfile("src/client/Ui.lua", "t", env))()
+child(clientFolder, "ModuleScript", "AdventureUI").module = assert(loadfile("src/client/AdventureUI.lua", "t", env))()
+child(clientFolder, "ModuleScript", "Feedback").module = { start = function() end }
 mode = "client"
 assert(loadfile("src/client/Game.client.lua", "t", env))()
 send("ready")
@@ -373,4 +397,130 @@ admin({ action = "kick", targetId = guest.UserId, reason = "Test reason" })
 check(guest.KickedReason == "Test reason", "Kick acts on the selected player with the supplied reason")
 players.PlayerRemoving:Fire(guest)
 check(guestHumanoid.WalkSpeed == 16, "Disconnect cleanup restores only the departing player's session")
+
+-- Exercise the new content controls through the real server/controller pair.
+local coinsBeforeQuest = lastProfile.coins
+send("quest", { id = "firstIce", mode = "claim" })
+check(lastProfile.coins == coinsBeforeQuest + 25 and lastProfile.quests.firstIce.claimed, "The content remote pays an earned quest reward")
+send("quest", { id = "firstIce", mode = "claim" })
+check(lastProfile.coins == coinsBeforeQuest + 25, "Replaying a quest claim through the remote cannot duplicate its reward")
+local invalidBalance = lastProfile.coins
+send("setting", { key = "coins", value = 100000 })
+check(lastProfile.coins == invalidBalance, "Settings cannot modify currency through the remote")
+send("setting", { key = "reducedEffects", value = true })
+check(lastProfile.settings.reducedEffects, "The settings remote updates the saved profile")
+findText("JOURNAL").Activated:Fire()
+check(player.PlayerGui.FrostbiteUI.AdventureOverlay.Visible and findText("species /"), "The Journal menu opens and renders the actual profile")
+findText("Map").Activated:Fire()
+check(findText("Whisperpine Lake"), "The map menu renders real travel destinations")
+findText("Quests").Activated:Fire()
+check(findText("Break the ice"), "The quest menu renders configured objectives")
+findText("Settings").Activated:Fire()
+check(findText("Reduced effects"), "The settings menu renders saved controls")
+findText("Guide").Activated:Fire()
+check(findText("Hook, then reel"), "The tutorial menu renders gameplay instructions")
+
+root.CFrame = cf(0, 5, 0)
+local beforeCatch = caught
+lastBite = nil
+send("cast")
+for _ = 1, 600 do if lastBite then break end tick(1 / 60) end
+check(lastBite ~= nil, "The hook reaction starts a new server-validated reel session")
+for _ = 1, 1800 do
+    if caught > beforeCatch then break end
+    local wanted = lastBite.bar < lastBite.target
+    bound.FrostbiteReel.fn("FrostbiteReel", wanted and "Begin" or "End")
+    tick(1 / 60)
+end
+check(caught == beforeCatch + 1 and #lastProfile.bag == 1, "A second catch works through the new hook/client input flow")
+local catchId = lastProfile.bag[1].catchId
+send("fishFlag", { id = catchId, key = "favorite", value = true })
+root.CFrame = cf(0, 5, -92)
+local protectedBalance = lastProfile.coins
+send("sell")
+check(#lastProfile.bag == 1 and lastProfile.coins == protectedBalance, "The actual shop respects fish protection flags")
+send("fishFlag", { id = catchId, key = "favorite", value = false })
+send("sellOne", { id = catchId })
+check(#lastProfile.bag == 0 and lastProfile.coins > protectedBalance, "Individual sales remove exactly the chosen catch")
+local afterSingle = lastProfile.coins
+send("sellOne", { id = catchId })
+check(lastProfile.coins == afterSingle, "Replaying a sold catch ID through the content remote cannot pay again")
+
+-- Unlock and travel are real operations, not notification-only buttons.
+admin({ action = "xp", targetId = player.UserId, amount = 1000 })
+admin({ action = "money", targetId = player.UserId, amount = 2000 })
+root.CFrame = cf(0, 5, 0)
+local beforeTrip = lastProfile.coins
+send("travel", { id = "lake" })
+check(not lastProfile.unlockedRegions.lake and lastProfile.coins == beforeTrip, "Travel requests outside a trail stop cannot spend or unlock")
+root.CFrame = cf(0, 5, -80)
+workspaceFake.StreamingEnabled = true
+send("travel", { id = "lake" })
+check(root.Anchored and player:GetAttribute("Traveling"), "Streamed travel holds movement while the destination is loading")
+advance(0.1)
+check(lastProfile.unlockedRegions.lake and root.Position.X == 360 and lastProfile.coins == beforeTrip - 350, "The travel remote unlocks and reaches another lake")
+check(not root.Anchored and not player:GetAttribute("Traveling"), "Travel restores movement after loading the destination")
+check(player.LastStreamRequest.X == 360, "Travel requests streaming around its actual destination")
+root.CFrame = cf(360, 5, 0)
+send("cast")
+check(lastStage.stage == "drilling", "Fishing permissions recognize an unlocked remote lake")
+advance(Config.DrillDuration + 0.1)
+check(worldState.holes[#worldState.holes].position.X == 360, "Drilling uses the remote lake's coordinates")
+send("cancel")
+root.CFrame = cf(360, 5, -95)
+send("travel", { id = "pond" })
+advance(0.1)
+check(root.Position.X == 0 and lastProfile.coins == beforeTrip - 350, "Returning on an unlocked trail is free")
+player.FailStreamRequest = true
+send("travel", { id = "lake" })
+advance(0.1)
+check(root.Position.X == 0 and not root.Anchored and not player:GetAttribute("Traveling") and lastProfile.unlockedRegions.lake,
+    "A streaming failure preserves access, keeps the player safe and restores movement")
+player.FailStreamRequest = false
+local rodBefore = lastProfile.equipped.rod
+send("equip", { category = "rod", id = "glacier" })
+check(lastProfile.equipped.rod == rodBefore, "Quick equip cannot grant an unowned rod")
+send("equip", { category = "bait", id = "bread" })
+check(lastProfile.equipped.bait == "bread", "Quick equip changes an owned/free item without a purchase")
+findText("Gear").Activated:Fire()
+check(findText("Equip owned items here"), "The Gear menu renders owned equipment and equip controls")
+
+-- Missing a bite must be a real failure with cleanup and no fish reward.
+autoHook = false
+lastHook = nil
+root.CFrame = cf(0, 5, 0)
+local beforeMiss = caught
+send("cast")
+check(character:GetAttribute("FishingStage") ~= nil, "The missed-hook regression starts a real cast")
+for _ = 1, 900 do if not character:GetAttribute("FishingStage") then break end tick(1 / 60) end
+check(lastHook and caught == beforeMiss and not character:GetAttribute("FishingStage") and humanoid.WalkSpeed == 16, "A missed hook times out, restores movement and awards no catch")
+autoHook = true
+
+-- Fifteen logical players, not a physics/rendering/performance claim.
+local stress = {}
+for i = 1, 15 do
+    local testPlayer = instance("Player")
+    testPlayer.UserId, testPlayer.Name, testPlayer.DisplayName, testPlayer.Parent = 1000 + i, "Stress" .. i, "Stress" .. i, players
+    local testCharacter = instance("Model") testCharacter.Parent, testPlayer.Character = character.Parent, testCharacter
+    local h = child(testCharacter, "Humanoid")
+    h.Health, h.MaxHealth, h.WalkSpeed, h.JumpPower, h.JumpHeight, h.AutoRotate = 100, 100, 16, 50, 7.2, true
+    local r = child(testCharacter, "Part", "HumanoidRootPart")
+    r.CFrame = cf(-42 + ((i - 1) % 5) * 21, 5, -35 + math.floor((i - 1) / 5) * 21)
+    table.insert(playerList, testPlayer) table.insert(stress, { player = testPlayer, humanoid = h })
+    players.PlayerAdded:Fire(testPlayer)
+    command.OnServerEvent:Fire(testPlayer, "cast")
+end
+advance(3)
+local active = 0
+for _, test in ipairs(stress) do if test.humanoid.WalkSpeed == 0 and test.player.leaderstats.Coins.Value == 120 then active = active + 1 end end
+check(active == 15, "Fifteen simulated player sessions can drill independently without sharing balances")
+for _, test in ipairs(stress) do players.PlayerRemoving:Fire(test.player) end
+local restored = 0
+for _, test in ipairs(stress) do if test.humanoid.WalkSpeed == 16 and not test.player:GetAttribute("ProfileReady") then restored = restored + 1 end end
+check(restored == 15, "All simulated disconnects clean up their own sessions")
+workspaceFake.CurrentCamera = { ViewportSize = vec(390, 844), CFrame = cf() }
+findText("JOURNAL").Activated:Fire()
+tick(1 / 60)
+check(player.PlayerGui.FrostbiteUI.AdventureOverlay.FieldKitPanel.Size[1] == 370, "Phone menus resize their layout instead of shrinking desktop text")
+check(player.PlayerGui.FrostbiteUI.AdminOverlay.AdminPanel.Size[1] == 370, "Admin tools reflow to a phone-width scrolling panel")
 print("PASS: " .. checks .. " controller integration checks (Roblox API fakes; not engine validation)")

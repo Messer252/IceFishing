@@ -1,13 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local Equipment = require(ReplicatedStorage.Shared.Equipment)
+local FishModels = require(ReplicatedStorage.Shared.FishModels)
 local Preview = {}
 local views, dragging = {}, nil
 
-function Preview.mount(viewport, category, id)
+local function mountModel(viewport, model)
     local world = Instance.new("WorldModel")
     world.Parent = viewport
-    local model = Equipment.build(category, id)
     model.Parent = world
     local bounds, size = model:GetBoundingBox()
     model:PivotTo(CFrame.new(-bounds.Position) * model:GetPivot())
@@ -35,6 +35,17 @@ function Preview.mount(viewport, category, id)
     end)
 end
 
+function Preview.mount(viewport, category, id) mountModel(viewport, Equipment.build(category, id)) end
+function Preview.fish(viewport, species, color, silhouette) mountModel(viewport, FishModels.build(species, color, silhouette)) end
+local function visible(viewport)
+    local node = viewport
+    while node do
+        if node:IsA("GuiObject") and not node.Visible then return false end
+        node = node.Parent
+    end
+    return true
+end
+
 UserInputService.InputChanged:Connect(function(input)
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input == dragging.input) then
         dragging.view.angle = dragging.view.angle + (input.Position.X - dragging.x) * 0.012
@@ -48,7 +59,7 @@ UserInputService.WindowFocusReleased:Connect(function() dragging = nil end)
 
 function Preview.step(dt)
     for viewport, v in pairs(views) do
-        if viewport.Parent then
+        if viewport.Parent and visible(viewport) then
             if not dragging or dragging.view ~= v then v.angle = v.angle + dt * 0.35 end
             v.model:PivotTo(CFrame.Angles(0, v.angle, 0) * v.base)
             local aspect = math.max(0.2, viewport.AbsoluteSize.X / math.max(1, viewport.AbsoluteSize.Y))
