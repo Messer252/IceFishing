@@ -17,6 +17,8 @@ local NetworkGate = require(ReplicatedStorage.Shared.NetworkGate)
 local ContentService = require(script.Parent.ContentService)
 local WorldExpansion = require(script.Parent.WorldExpansion)
 local EnvironmentService = require(script.Parent.EnvironmentService)
+local GlowService = require(script.Parent.GlowService)
+local GlowRules = require(ReplicatedStorage.Shared.GlowRules)
 
 local world, shopPrompt, sellPrompt = World.build(Config)
 local worldPrompts = WorldExpansion.build(world)
@@ -31,7 +33,7 @@ local rng = Random.new()
 local profiles, sessions, holes, limits = {}, {}, {}, {}
 local loading, closing = {}, false
 local gate = NetworkGate.new()
-local contentService, adminService
+local contentService, adminService, glows
 
 local function notify(player, message) event:FireClient(player, "notice", message) end
 local function rootOf(player)
@@ -111,6 +113,7 @@ end
 local function snapshot(s)
     return { token = s.token, bar = s.bar, velocity = s.velocity, target = s.target, width = s.width,
         progress = s.progress, tension = s.tension, phase = s.phase, difficulty = s.fish.difficulty, behavior = s.fish.behavior,
+        incomeMultiplier = s.fish.incomeMultiplier, luckMultiplier = s.fish.luckMultiplier,
         elapsed = s.elapsed, serverTime = workspace:GetServerTimeNow() }
 end
 
@@ -133,7 +136,7 @@ local function finish(player, outcome, message)
         local catch = { catchId = HttpService:GenerateGUID(false), species = fish.id, name = fish.name,
             rarity = fish.rarity, kg = fish.kg, value = fish.value, color = fish.color, xp = xp,
             trophy = fish.trophy, caughtAt = os.time(), location = Content.region(s.regionId).name, regionId = s.regionId, weather = s.weather,
-            variant = fish.variant, locked = false, favorite = false, discovery = discovery }
+            variant = fish.variant, incomeMultiplier = fish.incomeMultiplier, luckMultiplier = fish.luckMultiplier, locked = false, favorite = false, discovery = discovery }
         table.insert(p.bag, catch)
         contentService.catch(player, catch)
         World.catchEffect(world, s.hole.position, catch)
@@ -180,6 +183,18 @@ local function buy(player, data)
     notify(player, item.name .. " equipped.")
 end
 
+local function rollEncounter(s)
+    local state = environment.state()
+    local region = Content.region(s.hole.regionId)
+    local bonus = glows.bonuses(region.id, s.hole.position)
+    s.regionId, s.weather, s.glow = region.id, state.weather, bonus
+    local baseLuck = s.gearLuck + region.luck + Content.weather(state.weather).luck
+    return FishGeneration.roll(Config, HoleRules.fishingTier(s.hole), GlowRules.effectiveLuck(baseLuck, bonus.luck),
+        { bait = s.baitId, lure = s.lureId, strength = s.strength, region = region.id, weather = state.weather,
+            night = state.night, variant = Content.rollVariant(rng:NextNumber()), incomeMultiplier = bonus.income, luckMultiplier = bonus.luck },
+        function() return rng:NextNumber() end)
+end
+
 local cast
 local function startLine(player, s, hole)
     if sessions[player] ~= s then return end
@@ -197,12 +212,7 @@ local function startLine(player, s, hole)
     task.delay(Config.CastDuration, function()
         if sessions[player] ~= s then return end
         if bait.amount > 0 then p.bait[bait.id] = p.bait[bait.id] - 1 end
-        local state = environment.state()
-        local region = Content.region(hole.regionId)
-        s.regionId, s.weather = region.id, state.weather
-        s.fish = FishGeneration.roll(Config, HoleRules.fishingTier(hole), hole.luck + rod.luck + lure.luck + bait.luck + region.luck + Content.weather(state.weather).luck,
-            { bait = bait.id, lure = lure.id, strength = rod.strength, region = region.id, weather = state.weather,
-                night = state.night, variant = Content.rollVariant(rng:NextNumber()) }, function() return rng:NextNumber() end)
+        s.gearLuck, s.baitId, s.lureId, s.strength = hole.luck + rod.luck + lure.luck + bait.luck, bait.id, lure.id, rod.strength
         s.settings = Config.reelSettings(rod)
         s.width = Config.Fishing.BaseWidth + rod.control
         s.line, s.bobber = World.line(hole, s.tool)
@@ -219,7 +229,7 @@ local function startLine(player, s, hole)
             s.held = false
             event:FireClient(player, "hook", { token = s.token, duration = Content.HookWindow, startedAt = workspace:GetServerTimeNow() })
             task.delay(Content.HookWindow, function()
-                if sessions[player] == s and s.stage == "hooking" then finish(player, "escaped", "You missed the bite. Press Hook / Space / A next time!") end
+                if sessions[player] == s and s.stage == "hooking" then finish(player, "escaped", "You missed the bite. Use Hook when the fish bites next time!") end
             end)
         end)
     end)
@@ -320,7 +330,7 @@ command.OnServerEvent:Connect(function(player, action, data)
     if not allowedActions[action] then return end
     local now = os.clock()
     if not gate:allow(player.UserId, action, now, #profiles[player].bag) then return end
-    if action == "ready" then pushProfile(player)
+    if action == "ready" then pushProfile(player) glows.send(player)
     elseif action == "shop" then
         if nearShop(player) then event:FireClient(player, "shop") else notify(player, "The tackle shop is in the cabin by the pond.") end
     elseif action == "buy" then buy(player, data)
@@ -334,6 +344,7 @@ command.OnServerEvent:Connect(function(player, action, data)
             local pressed = data.held and not s.held
             s.held, s.lastInputAt = data.held, now
             if pressed and s.stage == "hooking" then
+                s.fish = rollEncounter(s)
                 s.elapsed, s.simAccumulator, s.sendAccumulator = 0, 0, 0
                 s.target = Reel.target(s.phase, s.fish.difficulty, 0, s.fish.behavior)
                 setStage(s, "reeling")
@@ -349,6 +360,8 @@ sellPrompt.Triggered:Connect(function(player)
     local root = rootOf(player)
     if root and (root.Position - Vector3.new(11, 4, -86)).Magnitude <= 12 then sellFish(player) end
 end)
+
+glows = GlowService.start({ profiles = profiles, event = event, root = rootOf })
 
 adminService = AdminService.start({ profiles = profiles, remotes = remotes, pushProfile = pushProfile, notify = notify, cancel = finish })
 
@@ -400,6 +413,7 @@ local maintenance = 0
 RunService.Heartbeat:Connect(function(dt)
     maintenance = maintenance + dt
     environment.step(dt)
+    glows.step()
     if maintenance >= 1 then
         maintenance = 0 Data.step()
         for player, profile in pairs(profiles) do

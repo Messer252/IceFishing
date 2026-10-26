@@ -63,7 +63,7 @@ python3 tools/build_place.py
 
 Python's standard library builds the place; Node dependencies are only for offline validation. `python3 tools/generate_audio.py` regenerates the original WAV files deterministically. GitHub Actions runs the same source/test/build checks on pushes and pull requests, including a stale-place check.
 
-Current local validation: **733 Lua checks, 36 parsed Lua/Luau-compatible files, and three Python tests passed**. The generated place was rebuilt from the checked source. Hosted CI has not been observed from this workspace.
+The earlier content release passed **733 Lua checks and three Python tests**; the latest model/interface/glow update adds the coverage described in [its update guide](FISH_AND_GLOWS.md). The generated place was rebuilt from the checked source. Hosted CI has not been observed from this workspace.
 
 The controller suite exercises the real game/admin/content/UI controllers with API fakes, including a 15-player lifecycle simulation. World geometry, rendered previews, audio playback, streaming, and actual network/physics throughput are **not** established by these tests.
 
@@ -91,3 +91,7 @@ Publish privately first from Studio. Set the intended player limit in the experi
 ## Scope boundaries
 
 Trading, Robux products, snowmobiles, tournaments and seasonal events remain optional future features from the master brief. They are not part of the Phase 3–5 core delivery. Final artist-authored mesh/animation/audio polish can replace the generated assets without changing the gameplay services. Generated models/poses and placeholder sounds should not be advertised as finished authored assets.
+
+## Fish and public glow update
+
+See [the model/interface/glow guide](FISH_AND_GLOWS.md) for the new anatomical recipes, geometry overview, removed Shop hotbar button, input-specific prompts, timed shared events and their server-authoritative income/luck rules. The existing Studio/live/device acceptance gates still apply.

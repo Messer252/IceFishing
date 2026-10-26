@@ -89,6 +89,9 @@ function Expansion.build(world)
         if i > 1 then
             part(folder, "Part", "Snowfield", Vector3.new(300, 8, 300), Vector3.new(region.x, -4, region.z), { 232, 241, 247 }, Enum.Material.Snow)
             local ice = part(folder, "Part", "FrozenLake", Vector3.new(2, region.radius * 2, region.radius * 2), Vector3.new(region.x, 1, region.z), region.color, Enum.Material.Ice)
+            ice.Transparency = 0.18
+            local water = part(folder, "Part", "LakeWater", Vector3.new(0.10, region.radius * 2, region.radius * 2), Vector3.new(region.x, 0.075, region.z), { 26, 61, 78 })
+            water.Shape, water.Orientation, water.CanCollide = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), false
             ice.Shape, ice.Orientation, ice.Reflectance = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), 0.12
             for tree = 1, 16 do
                 local angle = tree * math.pi / 8

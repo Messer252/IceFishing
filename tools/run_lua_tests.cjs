@@ -3,7 +3,7 @@
 const { lua, lauxlib, lualib, to_luastring, to_jsstring } = require('fengari');
 const files = process.argv.slice(2);
 let failed = false;
-for (const file of files.length ? files : ['tests/gameplay.lua', 'tests/persistence.lua', 'tests/phase2.lua', 'tests/content.lua', 'tests/runtime.lua']) {
+for (const file of files.length ? files : ['tests/gameplay.lua', 'tests/persistence.lua', 'tests/phase2.lua', 'tests/content.lua', 'tests/fish_models.lua', 'tests/glow_events.lua', 'tests/runtime.lua']) {
   const state = lauxlib.luaL_newstate();
   lualib.luaL_openlibs(state);
   const status = lauxlib.luaL_dofile(state, to_luastring(file));

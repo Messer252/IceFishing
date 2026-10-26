@@ -43,7 +43,7 @@ Content.Quests = {
 Content.Tutorial = {
     { event = "drill", title = "Meet the ice", description = "Walk onto the pond. F / Drill & Cast equips your auger and creates a hole. Better augers drill faster and make larger holes." },
     { event = "cast", title = "Your fishing spot", description = "The rod equips after drilling. Use F or the hole prompt to cast again from the same hole. G / New Hole replaces it." },
-    { event = "catch", title = "Hook, then reel", description = "Press Space / A / Hook when a fish bites. Hold to move right, release to drift left. Keep the gold fish inside your green zone." },
+    { event = "catch", title = "Hook, then reel", description = "Use Hook when a fish bites. Hold to move right, release to drift left. Keep the gold fish inside your green zone." },
     { event = "sell", title = "Bring home your catch", description = "Visit Mara by the cabin. Favorite or lock special fish in your bag before selling. Sell All protects both." },
     { event = "buy", title = "Make it yours", description = "Use the cabin shop to buy or equip rods, augers, bait, and lures. 3D View lets you inspect equipment. Bread is always free." },
     { event = "visit", title = "Beyond the pond", description = "Accept quests, fill your journal, and gain levels. Use a trail board to unlock and travel to new lakes." },

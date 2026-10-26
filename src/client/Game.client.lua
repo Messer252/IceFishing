@@ -8,6 +8,7 @@ local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Co
 local Reel = require(ReplicatedStorage.Shared:WaitForChild("Reel"))
 local Progression = require(ReplicatedStorage.Shared:WaitForChild("Progression"))
 local Content = require(ReplicatedStorage.Shared:WaitForChild("Content"))
+local InputHints = require(script.Parent:WaitForChild("InputHints"))
 local Inventory = require(ReplicatedStorage.Shared:WaitForChild("Inventory"))
 local Preview = require(script.Parent:WaitForChild("EquipmentPreview"))
 require(script.Parent:WaitForChild("AnglerAnimation")).start()
@@ -67,7 +68,7 @@ local coins = text(wallet, "120 coins", UDim2.new(1, -24, 0, 30), UDim2.fromOffs
 coins.Font = Enum.Font.GothamBold
 local bagCount = text(wallet, "Loading your profile...", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 43), 13, C.muted)
 local levelLabel = text(wallet, "Level 1", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 68), 11, C.mint)
-local xpTrack = frame(wallet, UDim2.new(1, -24, 0, 7), UDim2.fromOffset(12, 136), C.dark)
+local xpTrack = frame(wallet, UDim2.new(1, -24, 0, 7), UDim2.fromOffset(12, 94), C.dark)
 local xpFill = frame(xpTrack, UDim2.fromScale(0, 1), UDim2.fromOffset(0, 0), C.mint)
 local dataMode = text(wallet, "Loading saved progress...", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 106), 10, C.muted)
 player:GetAttributeChangedSignal("DataMode"):Connect(function() dataMode.Text = player:GetAttribute("DataMode") or "Loading saved progress..." end)
@@ -76,11 +77,10 @@ text(guide, "A QUIET DAY ON THE ICE", UDim2.fromOffset(218, 26), UDim2.fromOffse
 text(guide, "01  Walk onto the frozen pond\n02  Drill once, reuse your hole\n03  Hook the bite, then track the fish\n04  Sell fish at the cabin for gear", UDim2.fromOffset(218, 110), UDim2.fromOffset(14, 43), 14, C.muted)
 
 local dock = frame(gui, UDim2.fromOffset(468, 166), UDim2.new(0.5, -234, 1, -106))
-local castButton = button(dock, "DRILL / CAST  [F]", UDim2.fromOffset(208, 42), UDim2.fromOffset(12, 10), function() send(fishing and "cancel" or "cast") end)
-button(dock, "SHOP  [B]", UDim2.fromOffset(108, 42), UDim2.fromOffset(230, 10), function() send("shop") end, C.gold)
+local castButton = button(dock, "DRILL / CAST  [F]", UDim2.fromOffset(282, 42), UDim2.fromOffset(12, 10), function() send(fishing and "cancel" or "cast") end)
 local openBag
-button(dock, "BAG  [I]", UDim2.fromOffset(108, 42), UDim2.fromOffset(348, 10), function() if openBag then openBag() end end, Color3.fromRGB(191, 218, 232))
-button(dock, "NEW HOLE  [G]  /  replaces your previous hole", UDim2.new(1, -24, 0, 27), UDim2.fromOffset(12, 59), function()
+local bagButton = button(dock, "BAG  [I]", UDim2.fromOffset(152, 42), UDim2.fromOffset(304, 10), function() if openBag then openBag() end end, Color3.fromRGB(191, 218, 232))
+local drillButton = button(dock, "NEW HOLE  [G]  /  replaces your previous hole", UDim2.new(1, -24, 0, 27), UDim2.fromOffset(12, 59), function()
     if not fishing then send("drill") end
 end, Color3.fromRGB(191, 218, 232))
 for i, page in ipairs({ "Journal", "Quests", "Map", "Settings" }) do
@@ -231,7 +231,15 @@ local tensionBack = frame(reel, UDim2.new(0.3, 0, 0, 8), UDim2.new(0.66, 0, 0, 1
 local tensionFill = frame(tensionBack, UDim2.fromScale(0, 1), UDim2.fromOffset(0, 0), C.red)
 local progressLabel = text(reel, "CATCH PROGRESS", UDim2.fromOffset(180, 20), UDim2.fromOffset(22, 134), 10, C.muted)
 local tensionLabel = text(reel, "LINE TENSION", UDim2.fromOffset(140, 20), UDim2.new(0.66, 0, 0, 134), 10, C.red)
-local holdButton = button(reel, "HOLD / SPACE TO REEL", UDim2.new(1, -44, 0, 43), UDim2.fromOffset(22, 162), nil)
+local holdButton = button(reel, InputHints.hold(), UDim2.new(1, -44, 0, 43), UDim2.fromOffset(22, 162), nil)
+
+local function refreshInputHints()
+    castButton.Text, bagButton.Text, drillButton.Text = InputHints.cast(fishing), InputHints.bag(), InputHints.drill()
+    holdButton.Text = hookingInfo and InputHints.hook() or InputHints.hold()
+    if hookingInfo then caption.Text = InputHints.hookHelp() end
+end
+UserInputService.LastInputTypeChanged:Connect(refreshInputHints)
+refreshInputHints()
 
 local function updateHeld()
     held = keyHeld or reelPointer ~= nil
@@ -283,7 +291,7 @@ local function endFishing()
     fishing, token, held, reel.Visible = false, nil, false, false
     keyHeld, reelPointer, reelView, drillingInfo, hookingInfo = false, nil, nil, nil, nil
     releaseJump()
-    castButton.Text = "DRILL / CAST  [F]"
+    castButton.Text = InputHints.cast(false)
 end
 player.CharacterRemoving:Connect(endFishing)
 local function drawReel(data)
@@ -306,11 +314,11 @@ event.OnClientEvent:Connect(function(kind, data)
         end
         loadout.Text = table.concat(names, "  /  ")
         if shade.Visible then render() end
-    elseif kind == "notice" then notice(data)
+    elseif kind == "notice" or kind == "glowNotice" then notice(data)
     elseif kind == "shop" then adventure.close() modalMode = "shop" render() shade.Visible = true
     elseif kind == "stage" then
         hookingInfo = nil
-        holdButton.Text = "HOLD / SPACE / A TO REEL"
+        holdButton.Text = InputHints.hold()
         drillingInfo = data.stage == "drilling" and data or nil
         progressLabel.Text = drillingInfo and "DRILL PROGRESS" or "CATCH PROGRESS"
         tensionLabel.Visible, tensionBack.Visible = false, false
@@ -324,21 +332,24 @@ event.OnClientEvent:Connect(function(kind, data)
             reelTitle.Text, caption.Text = data.reused and "BACK TO YOUR FISHING SPOT" or "CASTING YOUR LINE", "Getting the line ready..."
         else reelTitle.Text, caption.Text = "LINE IN. TAKE A BREATH.", "Listening beneath the ice..." end
         progressFill.Size, tensionFill.Size = UDim2.fromScale(0, 1), UDim2.fromScale(0, 1)
-        castButton.Text = "CANCEL CAST  [F]"
+        castButton.Text = InputHints.cast(true)
     elseif kind == "hook" and data.token == token then
         hookingInfo = data
         keyHeld, reelPointer = false, nil
         updateHeld()
-        reelTitle.Text, caption.Text = "BITE! HOOK THE FISH", "Press Hook / Space / A before it slips away."
-        holdButton.Text, holdButton.Visible = "HOOK! / SPACE / A", true
+        reelTitle.Text, caption.Text = "BITE! HOOK THE FISH", InputHints.hookHelp()
+        holdButton.Text, holdButton.Visible = InputHints.hook(), true
         track.Visible, tensionLabel.Visible, tensionBack.Visible = false, false, false
         progressLabel.Text = "REACTION WINDOW"
     elseif kind == "bite" and data.token == token then
         hookingInfo = nil
-        holdButton.Text, progressLabel.Text = "HOLD / SPACE / A TO REEL", "CATCH PROGRESS"
+        holdButton.Text, progressLabel.Text = InputHints.hold(), "CATCH PROGRESS"
         track.Visible, holdButton.Visible = true, true
         tensionLabel.Visible, tensionBack.Visible = true, true
-        reelTitle.Text = "FISH ON!"
+        local bonuses = ""
+        if (data.incomeMultiplier or 1) > 1 then bonuses = bonuses .. " / VALUE x2" end
+        if (data.luckMultiplier or 1) > 1 then bonuses = bonuses .. " / LUCK x2" end
+        reelTitle.Text = "FISH ON!" .. bonuses
         caption.Text = "Hold to move right. Release to drift left. Follow the gold fish."
         reelView = Reel.newView(data)
         drawReel(Reel.viewStep(reelView, 0, held, workspace:GetServerTimeNow(), Config.Fishing))
@@ -391,6 +402,7 @@ end)
 
 require(script.Parent:WaitForChild("AdminMenu")).start(gui, remotes)
 require(script.Parent:WaitForChild("Feedback")).start(remotes)
+require(script.Parent:WaitForChild("GlowEffects")).start(remotes)
 
 -- Retry the handshake until the server has registered this player.
 task.spawn(function()

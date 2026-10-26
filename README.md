@@ -7,8 +7,10 @@ An original Roblox ice-fishing development build: a snowy forest surrounds a fro
 1. Download/open `dist/FrostbiteFishing.rbxlx` in **Roblox Studio**. The file is generated in this workspace; rebuild it with `python3 tools/build_place.py` if needed.
 2. Press **Play** (F5), rather than Run. The server generates the map, and the local player receives the interface.
 3. Walk from the spawn onto the blue ice. Press **F** or tap **Drill / Cast** to drill a hole and cast. Later casts near your hole reuse it. Press **G / New Hole** to replace it, including when upgrading its size.
-4. When a fish bites, **press Hook / Space / gamepad A** within the reaction window. Then **hold Space or the on-screen Reel button** to move your green zone right. Release to drift left. Keep the moving gold fish inside the zone until the catch meter fills. Too much line tension lets the fish escape.
+4. When a fish bites, **press Hook or Space** within the reaction window. Then **hold Space or the on-screen Reel button** to move your green zone right. Release to drift left. Keep the moving gold fish inside the zone until the catch meter fills. Too much line tension lets the fish escape.
 5. Return to the wooden cabin. Use its proximity prompt or press **B** nearby to open the shop. Sell fish at **Mara, the fish buyer**, or through the shop. Buy or equip better gear. **I** opens your fish bag anywhere.
+
+The Shop hotbar button has been removed; use the cabin interaction (or B nearby). Prompts follow the active input device and show keyboard controls on PC.
 
 Use **J / Journal**, **K / Quests**, **M / Map**, **O / Settings**, **H / Guide**, or the field-kit tabs. Use **Gear** to equip items you already own. Trail boards let you unlock and travel to new lakes.
 
@@ -21,6 +23,8 @@ You start with 120 coins, a hand auger, a starter rod, a plain hook, and unlimit
 - Five rods: luck, control, strength, reel speed, and stability affect encounters and reeling.
 - Seven lures: permanent unlocks that improve fish odds.
 - Free bread and six consumable bait options with species preferences and faster bites, sold in packs of ten casts.
+- Species-specific fish anatomy, natural skin patterns, fins, jaws, barbels and scutes, with lazy/detail-limited previews. [Model overview and glow rules](docs/FISH_AND_GLOWS.md).
+- Small timed public glow zones: 2× catch value, 2× luck, or both. Multiple players can fish inside a zone; bonuses lock when hooked and boosted values remain payable after expiry.
 - Twenty-two fish species across Common, Uncommon, Rare, Epic, and Legendary tiers, with variable weights and sale prices. Five species are available with the starter auger.
 - Visible rods with reels and line guides; augers with spiral flights, blades, grips, and motor housings on powered tiers. Casting, waiting, and reeling have procedural R6/R15 character poses.
 - Rotating shop-card models plus an enlarged **3D View** for every rod, auger, bait, and lure. Drag to rotate; scroll to zoom. The cabin rack uses the same models.
@@ -103,6 +107,8 @@ lua tests/runtime.lua
 lua tests/persistence.lua
 lua tests/phase2.lua
 lua tests/content.lua
+lua tests/fish_models.lua
+lua tests/glow_events.lua
 # Or use the pinned Node-based offline runner:
 npm ci --prefix tools --no-audit --no-fund
 node tools/check_lua.cjs

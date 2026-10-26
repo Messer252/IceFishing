@@ -54,7 +54,7 @@ function Adventure.start(gui, remotes, onOpen)
     local function showFish(fish, silhouette)
         local old = inspect:FindFirstChild("FishPreview") if old then old:Destroy() end
         local view = Ui.make("ViewportFrame", inspect, { Name = "FishPreview", Size = UDim2.new(1, -40, 1, -230), Position = UDim2.fromOffset(20, 65), BackgroundColor3 = c.dark, BorderSizePixel = 0 })
-        Ui.round(view) Preview.fish(view, fish.species or fish.id, fish.color, silhouette)
+        Ui.round(view) Preview.fish(view, fish.species or fish.id, fish.color, silhouette, fish.variant)
         info.Text = silhouette and "An undiscovered species. Explore its lake and experiment with equipment." or
             (fish.name .. "\n" .. (fish.variant or "Normal") .. " / " .. fish.rarity .. " / " .. tostring(fish.kg or fish.biggest or 0) .. " kg\n" ..
             (fish.value and (fish.value .. " coins / " .. (fish.location or Config.Region) .. "\nCaught " .. os.date("!%Y-%m-%d %H:%M UTC", fish.caughtAt or 0)) or
@@ -65,9 +65,9 @@ function Adventure.start(gui, remotes, onOpen)
         local row = Ui.frame(list, UDim2.new(1, 0, 0, mobile and math.max(height, 154) or height), UDim2.fromOffset(0, 0), c.card)
         return row
     end
-    local function preview(row, species, color, hidden)
+    local function preview(row, species, color, hidden, variant)
         local view = Ui.make("ViewportFrame", row, { Size = UDim2.fromOffset(mobile and 76 or 92, 76), Position = UDim2.fromOffset(8, 8), BackgroundColor3 = c.dark, BorderSizePixel = 0 })
-        Ui.round(view) Preview.fish(view, species, color, hidden)
+        Ui.round(view) Preview.fish(view, species, color, hidden, variant)
     end
     render = function()
         if not profile then return end
@@ -91,7 +91,7 @@ function Adventure.start(gui, remotes, onOpen)
             if #fishes == 0 then Ui.text(list, "No matching catches. Your next story is under the ice.", UDim2.new(1, 0, 0, 70), UDim2.fromOffset(0, 0), 17, c.muted) end
             for i, fish in ipairs(fishes) do
                 local row = card(126) row.LayoutOrder = i
-                preview(row, fish.species, fish.color)
+                preview(row, fish.species, fish.color, false, fish.variant)
                 Ui.text(row, fish.name .. (fish.trophy and " / TROPHY" or ""), UDim2.new(1, mobile and -108 or -130, 0, mobile and 38 or 26), UDim2.fromOffset(mobile and 96 or 112, 8), 17).Font = Enum.Font.GothamBold
                 Ui.text(row, (fish.variant or "Normal") .. " / " .. fish.rarity .. " / " .. fish.kg .. " kg / " .. fish.value .. " coins", UDim2.new(1, mobile and -108 or -130, 0, mobile and 54 or 24), UDim2.fromOffset(mobile and 96 or 112, mobile and 50 or 37), 13, c.muted)
                 Ui.button(row, "INSPECT", UDim2.fromOffset(mobile and 66 or 92, mobile and 30 or 26), UDim2.fromOffset(8, mobile and 112 or 91), function() showFish(fish) end, c.gold)
@@ -213,8 +213,8 @@ function Adventure.start(gui, remotes, onOpen)
             serial = serial + 1 local current = serial
             local old = catchCard:FindFirstChild("CatchPreview") if old then old:Destroy() end
             local view = Ui.make("ViewportFrame", catchCard, { Name = "CatchPreview", Size = UDim2.fromOffset(132, 176), Position = UDim2.fromOffset(8, 14), BackgroundTransparency = 1 })
-            Preview.fish(view, data.species, data.color)
-            catchText.Text = data.name .. "\n" .. data.variant .. " / " .. data.rarity .. "\n" .. data.kg .. " kg / " .. data.value .. " coins\n+" .. data.xp .. " XP" .. (data.discovery and " / NEW" or "") .. (data.trophy and "\nTROPHY CATCH" or "")
+            Preview.fish(view, data.species, data.color, false, data.variant)
+            catchText.Text = data.name .. "\n" .. data.variant .. " / " .. data.rarity .. "\n" .. data.kg .. " kg / " .. data.value .. " coins\n+" .. data.xp .. " XP" .. (data.discovery and " / NEW" or "") .. (data.trophy and "\nTROPHY CATCH" or "") .. ((data.incomeMultiplier or 1) > 1 and "\nGLOW VALUE x2 INCLUDED" or "")
             catchCard.Visible = true
             task.delay(data.rarity == "Legendary" and 7 or 5, function() if current == serial then catchCard.Visible = false end end)
         end

@@ -59,6 +59,9 @@ function World.build(config)
 
     part(world, "Snowfield", Vector3.new(420, 8, 420), Vector3.new(0, -4, 0), Color3.fromRGB(233, 241, 245), Enum.Material.Snow)
     local pond = part(world, "FrozenPond", Vector3.new(2, 136, 136), Vector3.new(0, 1, 0), Color3.fromRGB(145, 201, 219), Enum.Material.Ice)
+    pond.Transparency = 0.18
+    local water = part(world, "PondWater", Vector3.new(0.10, 136, 136), Vector3.new(0, 0.075, 0), Color3.fromRGB(26, 61, 78))
+    water.Shape, water.Orientation, water.CanCollide = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), false
     pond.Shape, pond.Orientation, pond.Reflectance = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), 0.15
     local rng = Random.new(2026)
     -- Thin pale cracks across the frozen surface, kept non-colliding.
@@ -207,7 +210,7 @@ end
 
 function World.catchEffect(parent, position, catch)
     local FishModels = require(game:GetService("ReplicatedStorage").Shared.FishModels)
-    local model = FishModels.build(catch.species, catch.color)
+    local model = FishModels.build(catch.species, catch.color, false, catch.variant, "low")
     model:ScaleTo(math.min(0.8, 0.35 + catch.kg ^ 0.25 * 0.08))
     model.Parent = parent
     local value = Instance.new("CFrameValue")

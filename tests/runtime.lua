@@ -5,6 +5,7 @@ local ContentRules = dofile("src/shared/ContentRules.lua")
 local Inventory = dofile("src/shared/Inventory.lua")
 local QuestRules = dofile("src/shared/QuestRules.lua")
 local NetworkGate = dofile("src/shared/NetworkGate.lua")
+local GlowRules = dofile("src/shared/GlowRules.lua")
 local Config = dofile("src/shared/Config.lua")
 local Reel = dofile("src/shared/Reel.lua")
 local HoleRules = dofile("src/shared/HoleRules.lua")
@@ -184,7 +185,7 @@ function Equipment.mount(anglerCharacter, category, id)
     return model, instance("Motor6D"), cf()
 end
 local shared = child(storage, "Folder", "Shared")
-for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment, Progression = Progression, FishGeneration = FishGeneration, Content = Content, ContentRules = ContentRules, Inventory = Inventory, QuestRules = QuestRules, NetworkGate = NetworkGate }) do
+for name, module in pairs({ Config = Config, Reel = Reel, HoleRules = HoleRules, Equipment = Equipment, Progression = Progression, FishGeneration = FishGeneration, Content = Content, ContentRules = ContentRules, Inventory = Inventory, QuestRules = QuestRules, NetworkGate = NetworkGate, GlowRules = GlowRules }) do
     local m = child(shared, "ModuleScript", name)
     m.module = module
 end
@@ -196,7 +197,8 @@ local bound = {}
 local context = {}
 function context:BindActionAtPriority(name, fn, _, priority) bound[name] = { fn = fn, priority = priority } end
 function context:UnbindAction(name) bound[name] = nil end
-local input = { InputBegan = signal(), InputEnded = signal(), InputChanged = signal(), WindowFocusReleased = signal(), GetFocusedTextBox = function() return nil end, IsKeyDown = function() return false end }
+local input = { lastType = "Keyboard", TouchEnabled = false, KeyboardEnabled = true, LastInputTypeChanged = signal(), InputBegan = signal(), InputEnded = signal(), InputChanged = signal(), WindowFocusReleased = signal(), GetFocusedTextBox = function() return nil end, IsKeyDown = function() return false end }
+function input:GetLastInputType() return self.lastType end
 local enums = setmetatable({ ContextActionPriority = { High = { Value = 3000 } } }, { __index = function(t, k)
     local values = setmetatable({}, { __index = function(_, n) return n end }) rawset(t, k, values) return values
 end })
@@ -220,6 +222,7 @@ child(serverFolder, "ModuleScript", "AdminPolicy").module = dofile("src/server/A
 child(serverFolder, "ModuleScript", "WorldExpansion").module = { build = function() return {} end }
 child(serverFolder, "ModuleScript", "EnvironmentService").module = assert(loadfile("src/server/EnvironmentService.lua", "t", env))()
 child(serverFolder, "ModuleScript", "ContentService").module = assert(loadfile("src/server/ContentService.lua", "t", env))()
+child(serverFolder, "ModuleScript", "GlowService").module = assert(loadfile("src/server/GlowService.lua", "t", env))()
 child(serverFolder, "ModuleScript", "AdminService").module = assert(loadfile("src/server/AdminService.lua", "t", env))()
 child(serverFolder, "ModuleScript", "PlayerDataService").module = {
     load = function(p) p:SetAttribute("DataMode", "Studio sandbox · not saved") return Schema.new() end,
@@ -229,9 +232,10 @@ assert(loadfile("src/server/Game.server.lua", "t", env))()
 local command = storage.FishingRemotes.Command
 local event = storage.FishingRemotes.Event
 local lastProfile, lastBite, lastStage, caught = nil, nil, nil, 0
-local autoHook, lastHook = true, nil
+local autoHook, lastHook, activeGlows = true, nil, {}
 event.OnClientEvent:Connect(function(kind, data)
-    if kind == "profile" then lastProfile = data elseif kind == "bite" then lastBite = data
+    if kind == "glowZones" then activeGlows = data
+    elseif kind == "profile" then lastProfile = data elseif kind == "bite" then lastBite = data
     elseif kind == "hook" then
         lastHook = data
         if autoHook then delay(0.05, function() command.OnServerEvent:Fire(player, "input", { token = data.token, held = true }) end) end
@@ -304,6 +308,8 @@ env.script = { Parent = clientFolder }
 child(clientFolder, "ModuleScript", "Ui").module = assert(loadfile("src/client/Ui.lua", "t", env))()
 child(clientFolder, "ModuleScript", "AdventureUI").module = assert(loadfile("src/client/AdventureUI.lua", "t", env))()
 child(clientFolder, "ModuleScript", "Feedback").module = { start = function() end }
+child(clientFolder, "ModuleScript", "GlowEffects").module = { start = function() end }
+child(clientFolder, "ModuleScript", "InputHints").module = assert(loadfile("src/client/InputHints.lua", "t", env))()
 mode = "client"
 assert(loadfile("src/client/Game.client.lua", "t", env))()
 send("ready")
@@ -311,6 +317,14 @@ local function findText(needle)
     for _, object in ipairs(player.PlayerGui:GetDescendants()) do if object.Text and tostring(object.Text):find(needle, 1, true) then return object end end
 end
 check(findText("Hand Auger  /  Starter Rod"), "Actual client profile handler formats the equipment HUD without errors")
+check(not findText("SHOP  [B]"), "The hotbar no longer contains a Shop button")
+check(findText("HOLD TO REEL [SPACE]"), "PC reeling prompts display keyboard controls")
+check(not findText("SPACE / A") and not findText("[R1]") and not findText("HOLD A TO REEL"), "PC users do not see controller button instructions")
+input.lastType = "Gamepad1" input.LastInputTypeChanged:Fire("Gamepad1")
+check(findText("HOLD A TO REEL") and findText("BAG [R1]"), "Controller prompts appear only after controller input")
+input.lastType = "Keyboard" input.LastInputTypeChanged:Fire("Keyboard")
+check(findText("HOLD TO REEL [SPACE]") and not findText("HOLD A TO REEL"), "Returning to the keyboard clears controller prompts")
+
 -- The shop render path constructs previews for every equipment category.
 send("shop")
 check(findText("3D VIEW"), "The actual shop exposes enlarged 3D inspection")
@@ -420,12 +434,15 @@ check(findText("Reduced effects"), "The settings menu renders saved controls")
 findText("Guide").Activated:Fire()
 check(findText("Hook, then reel"), "The tutorial menu renders gameplay instructions")
 
-root.CFrame = cf(0, 5, 0)
+local activeZone = activeGlows[1]
+check(activeZone and activeZone.expiresAt > now + 12, "The running server spawns a timed public glow event")
+root.CFrame = cf(activeZone.x, 5, activeZone.z + 3.1)
 local beforeCatch = caught
 lastBite = nil
 send("cast")
 for _ = 1, 600 do if lastBite then break end tick(1 / 60) end
 check(lastBite ~= nil, "The hook reaction starts a new server-validated reel session")
+check(lastBite.incomeMultiplier == 2, "Hooking inside a real server glow captures its income multiplier")
 for _ = 1, 1800 do
     if caught > beforeCatch then break end
     local wanted = lastBite.bar < lastBite.target
@@ -433,6 +450,7 @@ for _ = 1, 1800 do
     tick(1 / 60)
 end
 check(caught == beforeCatch + 1 and #lastProfile.bag == 1, "A second catch works through the new hook/client input flow")
+check(lastProfile.bag[1].incomeMultiplier == 2, "The caught fish retains its authoritative event bonus")
 local catchId = lastProfile.bag[1].catchId
 send("fishFlag", { id = catchId, key = "favorite", value = true })
 root.CFrame = cf(0, 5, -92)
