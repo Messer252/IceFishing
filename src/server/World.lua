@@ -98,7 +98,7 @@ function World.build(config)
     end
     part(shop, "Roof", Vector3.new(36, 2, 30), Vector3.new(0, 16, -94), Color3.fromRGB(226, 238, 242), Enum.Material.Snow)
     local counter = part(shop, "Counter", Vector3.new(24, 4, 3), Vector3.new(0, 3, -96), Color3.fromRGB(161, 112, 76), Enum.Material.WoodPlanks)
-    sign(shop, "CabinSign", Vector3.new(25, 3.6, 0.6), Vector3.new(0, 12.9, -81.2), "FROSTBITE TACKLE", "AUGERS  •  RODS  •  BAIT  •  LURES")
+    sign(shop, "CabinSign", Vector3.new(25, 3.6, 0.6), Vector3.new(0, 12.9, -81.2), "HOOKED! TACKLE", "AUGERS  •  RODS  •  BAIT  •  LURES")
     sign(shop, "SellSign", Vector3.new(10, 1.8, 0.25), Vector3.new(0, 3.3, -94.35), "SELL YOUR CATCH", "Fresh fish. Fair prices.")
     -- Real 3D stock on the back wall, matching the preview and held models.
     part(shop, "EquipmentRack", Vector3.new(28, 0.4, 2), Vector3.new(0, 4, -105), Color3.fromRGB(81, 59, 45), Enum.Material.Wood)
@@ -115,7 +115,7 @@ function World.build(config)
     local promptPart = part(shop, "ShopPrompt", Vector3.new(1, 1, 1), Vector3.new(0, 4, -87), Color3.new(1, 1, 1))
     promptPart.Transparency, promptPart.CanCollide = 1, false
     local prompt = Instance.new("ProximityPrompt")
-    prompt.ActionText, prompt.ObjectText = "Shop & sell fish", "Frostbite Tackle"
+    prompt.ActionText, prompt.ObjectText = "Shop & sell fish", "Hooked! Tackle"
     prompt.MaxActivationDistance, prompt.HoldDuration, prompt.RequiresLineOfSight = 18, 0, false
     prompt.Parent = promptPart
     local light = Instance.new("PointLight")

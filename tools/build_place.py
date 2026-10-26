@@ -47,7 +47,7 @@ def build(destination=None):
     item(root, "Lighting", "Lighting")
     for index, node in enumerate(root.iter("Item"), start=1):
         node.set("referent", f"RBX{index}")
-    destination = destination or ROOT / "dist/FrostbiteFishing.rbxlx"
+    destination = destination or ROOT / "dist/Hooked.rbxlx"
     destination.parent.mkdir(parents=True, exist_ok=True)
     ET.indent(root)
     ET.ElementTree(root).write(destination, encoding="utf-8", xml_declaration=True)

@@ -1,4 +1,4 @@
-# Original Frostbite audio pack
+# Original Hooked! audio pack
 
 These eleven mono 16-bit PCM, 22,050 Hz WAV files are synthesized by `tools/generate_audio.py` using original tone/noise recipes and no third-party samples. They are project source assets, not uploaded Roblox assets. You may use and modify them for this game.
 

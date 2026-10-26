@@ -1,5 +1,5 @@
 {
-  "name": "FrostbiteFishing",
+  "name": "Hooked!",
   "tree": {
     "$className": "DataModel",
     "ReplicatedStorage": { "Shared": { "$path": "src/shared" } },

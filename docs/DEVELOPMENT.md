@@ -1,4 +1,4 @@
-# Frostbite Fishing development plan
+# Hooked! development plan
 
 The user's master brief defines an original, multiplayer ice-fishing simulator. Existing working systems and the Rojo/Python build workflow are retained. Build one cohesive playable loop before adding more regions or progression systems.
 
@@ -29,7 +29,7 @@ New modules: `src/shared/Equipment.lua`, `src/shared/HoleRules.lua`, `src/client
 
 Updated controllers/configuration: `src/server/Game.server.lua`, `src/server/World.lua`, `src/shared/Config.lua`, `src/shared/Reel.lua`, and `src/client/Game.client.lua`.
 
-Validation/build/documentation: `tests/gameplay.lua`, `tests/runtime.lua`, `tests/test_build.py`, `tools/run_lua_tests.cjs`, `README.md`, this plan, and rebuilt `dist/FrostbiteFishing.rbxlx`.
+Validation/build/documentation: `tests/gameplay.lua`, `tests/runtime.lua`, `tests/test_build.py`, `tools/run_lua_tests.cjs`, `README.md`, this plan, and rebuilt `dist/Hooked.rbxlx`.
 
 ### Studio acceptance gate
 

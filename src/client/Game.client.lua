@@ -61,7 +61,7 @@ local adventure
 local keyHeld, reelPointer = false, nil
 
 local brand = frame(gui, UDim2.fromOffset(252, 76), UDim2.fromOffset(16, 16))
-text(brand, "F R O S T B I T E", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 20, C.mint).Font = Enum.Font.GothamBold
+text(brand, "Hooked!", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 20, C.mint).Font = Enum.Font.GothamBold
 text(brand, "ICE FISHING  /  FROZEN WILDERNESS", UDim2.new(1, -28, 0, 20), UDim2.fromOffset(14, 43), 10, C.muted)
 local wallet = frame(gui, UDim2.fromOffset(190, 138), UDim2.new(1, -206, 0, 16))
 local coins = text(wallet, "120 coins", UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 9), 21, C.gold)
@@ -112,7 +112,7 @@ local shade = make("TextButton", gui, { Text = "", Size = UDim2.fromScale(1, 1),
 local modal = frame(shade, UDim2.fromOffset(650, 530), UDim2.fromScale(0.5, 0.5))
 modal.AnchorPoint = Vector2.new(0.5, 0.5)
 local modalScale = make("UIScale", modal, { Scale = 1 })
-local modalTitle = text(modal, "FROSTBITE TACKLE", UDim2.new(1, -90, 0, 34), UDim2.fromOffset(22, 16), 23, C.gold)
+local modalTitle = text(modal, "HOOKED! TACKLE", UDim2.new(1, -90, 0, 34), UDim2.fromOffset(22, 16), 23, C.gold)
 modalTitle.Font = Enum.Font.GothamBold
 local modalSubtitle = text(modal, "Better gear. Bigger holes. Rarer fish.", UDim2.new(1, -44, 0, 24), UDim2.fromOffset(22, 52), 14, C.muted)
 button(modal, "X", UDim2.fromOffset(36, 36), UDim2.new(1, -54, 0, 18), function() shade.Visible = false end, Color3.fromRGB(181, 203, 213))
@@ -160,7 +160,7 @@ render = function()
     inspection.Visible = false
     local isShop = modalMode == "shop"
     tabs.Visible = isShop
-    modalTitle.Text = isShop and "FROSTBITE TACKLE" or "YOUR FISH BAG"
+    modalTitle.Text = isShop and "HOOKED! TACKLE" or "YOUR FISH BAG"
     modalSubtitle.Text = isShop and ("Balance: " .. profile.coins .. " coins  /  Purchases auto-equip") or "Bring your catch to the cabin to sell it."
     list.Position = UDim2.fromOffset(22, isShop and 140 or 90)
     list.Size = UDim2.new(1, -44, 1, isShop and -208 or -158)

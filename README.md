@@ -1,10 +1,11 @@
-# Frostbite Fishing
+# Hooked!
 
 An original Roblox ice-fishing development build: a snowy forest surrounds a frozen pond, and a lakeside tackle cabin sells equipment and buys your catches. All scenery and UI are generated from code; no paid models or external assets are required.
 
 ## Open in Roblox Studio
 
-1. Download/open `dist/FrostbiteFishing.rbxlx` in **Roblox Studio**. The file is generated in this workspace; rebuild it with `python3 tools/build_place.py` if needed.
+1. Download/open `dist/Hooked.rbxlx` in **Roblox Studio**. The file is generated in this workspace; rebuild it with `python3 tools/build_place.py` if needed.
+   When publishing to Roblox, set the experience name to **Hooked!** in Creator Dashboard; the file does not change an existing published experience’s title.
 2. Press **Play** (F5), rather than Run. The server generates the map, and the local player receives the interface.
 3. Walk from the spawn onto the blue ice. Press **F** or tap **Drill / Cast** to drill a hole and cast. Later casts near your hole reuse it. Press **G / New Hole** to replace it, including when upgrading its size.
 4. When a fish bites, **press Hook or Space** within the reaction window. Then **hold Space or the on-screen Reel button** to move your green zone right. Release to drift left. Keep the moving gold fish inside the zone until the catch meter fills. Too much line tension lets the fish escape.
@@ -58,9 +59,9 @@ python3 tools/build_place.py
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-Python 3 and its standard library are sufficient to build the place. No Python packages or credentials are needed. The ready-to-open `dist/FrostbiteFishing.rbxlx` is included in Git alongside its source and build script; rebuild it after changing the game scripts.
+Python 3 and its standard library are sufficient to build the place. No Python packages or credentials are needed. The ready-to-open `dist/Hooked.rbxlx` is included in Git alongside its source and build script; rebuild it after changing the game scripts.
 
-If you use [Rojo](https://rojo.space/), `default.project.json` maps the same source tree. Run `rojo serve` and connect through its Studio plugin, or use `rojo build -o dist/FrostbiteFishing.rbxlx`. Rojo is optional and was not installed or tested in the cloud workspace.
+If you use [Rojo](https://rojo.space/), `default.project.json` maps the same source tree. Run `rojo serve` and connect through its Studio plugin, or use `rojo build -o dist/Hooked.rbxlx`. Rojo is optional and was not installed or tested in the cloud workspace.
 
 | File | Purpose |
 | --- | --- |

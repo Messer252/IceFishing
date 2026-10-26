@@ -148,7 +148,7 @@ local function finish(player, outcome, message)
 end
 
 local function buy(player, data)
-    if not nearShop(player) then notify(player, "Visit Frostbite Tackle by the pond to buy gear.") return end
+    if not nearShop(player) then notify(player, "Visit Hooked! Tackle by the pond to buy gear.") return end
     if sessions[player] then notify(player, "Finish your cast first.") return end
     if type(data) ~= "table" or type(data.category) ~= "string" or type(data.id) ~= "string" then return end
     local item, p = Config.findGear(data.category, data.id), profiles[player]

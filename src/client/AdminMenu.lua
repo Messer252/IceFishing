@@ -35,7 +35,7 @@ function AdminMenu.start(gui, remotes)
         ScrollingDirection = Enum.ScrollingDirection.Y, Position = UDim2.fromScale(0.5, 0.5), AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = navy, BorderSizePixel = 0 })
     round(panel)
     local scale = make("UIScale", panel, { Scale = 1 })
-    text(panel, "FROSTBITE / ADMIN", UDim2.new(1, -80, 0, 34), UDim2.fromOffset(20, 14), 22).Font = Enum.Font.GothamBold
+    text(panel, "HOOKED! / ADMIN", UDim2.new(1, -80, 0, 34), UDim2.fromOffset(20, 14), 22).Font = Enum.Font.GothamBold
     text(panel, "Manage players in this server", UDim2.new(1, -40, 0, 24), UDim2.fromOffset(20, 49), 13)
     button(panel, "X", UDim2.fromOffset(36, 34), UDim2.new(1, -56, 0, 16), function() overlay.Visible = false end, gold)
     local selected, confirm = nil, nil
