@@ -31,9 +31,13 @@ class PlaceTests(unittest.TestCase):
         expected = {
             "/ReplicatedStorage/Shared/Config": ("ModuleScript", "src/shared/Config.lua"),
             "/ReplicatedStorage/Shared/Reel": ("ModuleScript", "src/shared/Reel.lua"),
+            "/ReplicatedStorage/Shared/Equipment": ("ModuleScript", "src/shared/Equipment.lua"),
+            "/ReplicatedStorage/Shared/HoleRules": ("ModuleScript", "src/shared/HoleRules.lua"),
             "/ServerScriptService/Server/World": ("ModuleScript", "src/server/World.lua"),
             "/ServerScriptService/Server/Game": ("Script", "src/server/Game.server.lua"),
             "/StarterPlayer/StarterPlayerScripts/Client/Game": ("LocalScript", "src/client/Game.client.lua"),
+            "/StarterPlayer/StarterPlayerScripts/Client/AnglerAnimation": ("ModuleScript", "src/client/AnglerAnimation.lua"),
+            "/StarterPlayer/StarterPlayerScripts/Client/EquipmentPreview": ("ModuleScript", "src/client/EquipmentPreview.lua"),
         }
         self.assertEqual(set(sources), set(expected))
         for path, (kind, file) in expected.items():

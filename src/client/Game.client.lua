@@ -2,8 +2,12 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local ContextActionService = game:GetService("ContextActionService")
 local player = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local Reel = require(ReplicatedStorage.Shared:WaitForChild("Reel"))
+local Preview = require(script.Parent:WaitForChild("EquipmentPreview"))
+require(script.Parent:WaitForChild("AnglerAnimation")).start()
 local remotes = ReplicatedStorage:WaitForChild("FishingRemotes")
 local command, event = remotes:WaitForChild("Command"), remotes:WaitForChild("Event")
 local C = {
@@ -46,6 +50,9 @@ end
 local function send(action, data) command:FireServer(action, data) end
 local profile, activeTab, modalMode = nil, "auger", "shop"
 local fishing, token, held = false, nil, false
+local reelView, jumpLock = nil, nil
+local drillingInfo = nil
+local keyHeld, reelPointer = false, nil
 
 local brand = frame(gui, UDim2.fromOffset(252, 76), UDim2.fromOffset(16, 16))
 text(brand, "F R O S T B I T E", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 20, C.mint).Font = Enum.Font.GothamBold
@@ -56,14 +63,17 @@ coins.Font = Enum.Font.GothamBold
 local bagCount = text(wallet, "0 fish in bag", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 43), 13, C.muted)
 local guide = frame(gui, UDim2.fromOffset(246, 167), UDim2.fromOffset(16, 108))
 text(guide, "A QUIET DAY ON THE ICE", UDim2.fromOffset(218, 26), UDim2.fromOffset(14, 10), 12, C.gold).Font = Enum.Font.GothamBold
-text(guide, "01  Walk onto the frozen pond\n02  Drill a hole and cast your line\n03  Hold to follow the moving fish\n04  Sell fish at the cabin for gear", UDim2.fromOffset(218, 110), UDim2.fromOffset(14, 43), 14, C.muted)
+text(guide, "01  Walk onto the frozen pond\n02  Drill once, reuse your hole\n03  Hold to follow the moving fish\n04  Sell fish at the cabin for gear", UDim2.fromOffset(218, 110), UDim2.fromOffset(14, 43), 14, C.muted)
 
-local dock = frame(gui, UDim2.fromOffset(468, 90), UDim2.new(0.5, -234, 1, -106))
-local castButton = button(dock, "DRILL & FISH  [F]", UDim2.fromOffset(208, 42), UDim2.fromOffset(12, 10), function() send(fishing and "cancel" or "cast") end)
+local dock = frame(gui, UDim2.fromOffset(468, 126), UDim2.new(0.5, -234, 1, -106))
+local castButton = button(dock, "DRILL / CAST  [F]", UDim2.fromOffset(208, 42), UDim2.fromOffset(12, 10), function() send(fishing and "cancel" or "cast") end)
 button(dock, "SHOP  [B]", UDim2.fromOffset(108, 42), UDim2.fromOffset(230, 10), function() send("shop") end, C.gold)
 local openBag
 button(dock, "BAG  [I]", UDim2.fromOffset(108, 42), UDim2.fromOffset(348, 10), function() if openBag then openBag() end end, Color3.fromRGB(191, 218, 232))
-local loadout = text(dock, "Walk onto the ice to begin", UDim2.new(1, -24, 0, 20), UDim2.fromOffset(12, 60), 11, C.muted)
+button(dock, "NEW HOLE  [G]  /  replaces your previous hole", UDim2.new(1, -24, 0, 27), UDim2.fromOffset(12, 59), function()
+    if not fishing then send("drill") end
+end, Color3.fromRGB(191, 218, 232))
+local loadout = text(dock, "Walk onto the ice to begin", UDim2.new(1, -24, 0, 20), UDim2.fromOffset(12, 94), 11, C.muted)
 loadout.TextXAlignment = Enum.TextXAlignment.Center
 
 local toast = frame(gui, UDim2.new(0.8, 0, 0, 72), UDim2.new(0.1, 0, 0, 104))
@@ -102,6 +112,24 @@ for i, category in ipairs({ "auger", "rod", "bait", "lure" }) do
     end, C.card)
 end
 
+local inspection = frame(modal, UDim2.fromScale(1, 1), UDim2.fromScale(0, 0), C.panel)
+inspection.Visible = false
+local inspectTitle = text(inspection, "EQUIPMENT", UDim2.new(1, -150, 0, 32), UDim2.fromOffset(22, 18), 22, C.gold)
+inspectTitle.Font = Enum.Font.GothamBold
+button(inspection, "BACK", UDim2.fromOffset(90, 34), UDim2.new(1, -112, 0, 18), function() inspection.Visible = false end, C.gold)
+local inspectDescription = text(inspection, "", UDim2.new(1, -44, 0, 45), UDim2.fromOffset(22, 435), 15, C.muted)
+text(inspection, "Drag to rotate  /  Scroll to zoom", UDim2.new(1, -44, 0, 24), UDim2.fromOffset(22, 493), 12, C.mint).TextXAlignment = Enum.TextXAlignment.Center
+local function inspect(category, item)
+    local old = inspection:FindFirstChild("EquipmentView")
+    if old then old:Destroy() end
+    inspectTitle.Text, inspectDescription.Text = item.name, item.description
+    local viewport = make("ViewportFrame", inspection, { Name = "EquipmentView", Size = UDim2.new(1, -44, 0, 355), Position = UDim2.fromOffset(22, 68),
+        BackgroundColor3 = C.dark, BorderSizePixel = 0 })
+    rounded(viewport)
+    Preview.mount(viewport, category, item.id)
+    inspection.Visible = true
+end
+
 local function bagValue()
     local sum = 0
     if profile then for _, fish in ipairs(profile.bag) do sum = sum + fish.value end end
@@ -111,6 +139,7 @@ end
 render = function()
     for _, child in ipairs(list:GetChildren()) do if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end end
     if not profile then return end
+    inspection.Visible = false
     local isShop = modalMode == "shop"
     tabs.Visible = isShop
     modalTitle.Text = isShop and "FROSTBITE TACKLE" or "YOUR FISH BAG"
@@ -125,10 +154,14 @@ render = function()
     if isShop then
         for i, item in ipairs(Config.Gear[activeTab]) do
             local category = activeTab
-            local card = frame(list, UDim2.new(1, 0, 0, 100), UDim2.fromOffset(0, 0), C.card)
+            local card = frame(list, UDim2.new(1, 0, 0, 124), UDim2.fromOffset(0, 0), C.card)
             card.LayoutOrder = i
-            text(card, item.name, UDim2.new(1, -166, 0, 28), UDim2.fromOffset(14, 8), 17).Font = Enum.Font.GothamBold
-            text(card, item.description, UDim2.new(1, -175, 0, 43), UDim2.fromOffset(14, 38), 13, C.muted)
+            local viewport = make("ViewportFrame", card, { Size = UDim2.fromOffset(88, 86), Position = UDim2.fromOffset(8, 8), BackgroundColor3 = C.dark, BorderSizePixel = 0 })
+            rounded(viewport, 8)
+            Preview.mount(viewport, category, item.id)
+            button(card, "3D VIEW", UDim2.fromOffset(88, 22), UDim2.fromOffset(8, 97), function() inspect(category, item) end, C.gold)
+            text(card, item.name, UDim2.new(1, -270, 0, 28), UDim2.fromOffset(110, 8), 16).Font = Enum.Font.GothamBold
+            text(card, item.description, UDim2.new(1, -276, 0, 68), UDim2.fromOffset(110, 40), 13, C.muted)
             local equipped = profile.equipped[category] == item.id
             local owned = category ~= "bait" and profile.owned[category][item.id]
             local stock = category == "bait" and (profile.bait[item.id] or 0) or 0
@@ -174,34 +207,61 @@ local progressBack = frame(reel, UDim2.new(0.64, -20, 0, 8), UDim2.fromOffset(22
 local progressFill = frame(progressBack, UDim2.fromScale(0.25, 1), UDim2.fromOffset(0, 0), C.mint)
 local tensionBack = frame(reel, UDim2.new(0.3, 0, 0, 8), UDim2.new(0.66, 0, 0, 123), C.dark)
 local tensionFill = frame(tensionBack, UDim2.fromScale(0, 1), UDim2.fromOffset(0, 0), C.red)
-text(reel, "CATCH PROGRESS", UDim2.fromOffset(180, 20), UDim2.fromOffset(22, 134), 10, C.muted)
-text(reel, "LINE TENSION", UDim2.fromOffset(140, 20), UDim2.new(0.66, 0, 0, 134), 10, C.red)
+local progressLabel = text(reel, "CATCH PROGRESS", UDim2.fromOffset(180, 20), UDim2.fromOffset(22, 134), 10, C.muted)
+local tensionLabel = text(reel, "LINE TENSION", UDim2.fromOffset(140, 20), UDim2.new(0.66, 0, 0, 134), 10, C.red)
 local holdButton = button(reel, "HOLD / SPACE TO REEL", UDim2.new(1, -44, 0, 43), UDim2.fromOffset(22, 162), nil)
 
-local function setHeld(value)
-    held = value
+local function updateHeld()
+    held = keyHeld or reelPointer ~= nil
     if token then send("input", { token = token, held = held }) end
 end
+local function lockJump()
+    if jumpLock then return end
+    local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        jumpLock = { humanoid = humanoid, enabled = humanoid:GetStateEnabled(Enum.HumanoidStateType.Jumping) }
+        humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+        humanoid.Jump = false
+    end
+    ContextActionService:BindActionAtPriority("FrostbiteReel", function(_, state)
+        keyHeld = state == Enum.UserInputState.Begin and not UserInputService:GetFocusedTextBox()
+        updateHeld()
+        return Enum.ContextActionResult.Sink
+    end, false, Enum.ContextActionPriority.High.Value + 100, Enum.KeyCode.Space, Enum.KeyCode.ButtonA)
+end
+local function releaseJump()
+    ContextActionService:UnbindAction("FrostbiteReel")
+    if jumpLock and jumpLock.humanoid.Parent then
+        jumpLock.humanoid.Jump = false
+        jumpLock.humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, jumpLock.enabled)
+    end
+    jumpLock = nil
+end
 holdButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then setHeld(true) end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        reelPointer = input
+        updateHeld()
+    end
 end)
 UserInputService.InputEnded:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Space or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then setHeld(false) end
+    if input == reelPointer or (reelPointer and input.UserInputType == Enum.UserInputType.MouseButton1) then reelPointer = nil updateHeld() end
 end)
-UserInputService.WindowFocusReleased:Connect(function() setHeld(false) end)
+UserInputService.WindowFocusReleased:Connect(function() keyHeld, reelPointer = false, nil updateHeld() end)
 UserInputService.InputBegan:Connect(function(input, processed)
-    if UserInputService:GetFocusedTextBox() then return end
-    if input.KeyCode == Enum.KeyCode.Space and fishing then setHeld(true) return end
-    if processed then return end
+    if processed or UserInputService:GetFocusedTextBox() then return end
     if input.KeyCode == Enum.KeyCode.F then send(fishing and "cancel" or "cast")
+    elseif input.KeyCode == Enum.KeyCode.G and not fishing then send("drill")
     elseif input.KeyCode == Enum.KeyCode.B then send("shop")
     elseif input.KeyCode == Enum.KeyCode.I then openBag() end
 end)
 
 local function endFishing()
     fishing, token, held, reel.Visible = false, nil, false, false
-    castButton.Text = "DRILL & FISH  [F]"
+    keyHeld, reelPointer, reelView, drillingInfo = false, nil, nil, nil
+    releaseJump()
+    castButton.Text = "DRILL / CAST  [F]"
 end
+player.CharacterRemoving:Connect(endFishing)
 local function drawReel(data)
     zone.Position, zone.Size = UDim2.fromScale(data.bar, 0), UDim2.fromScale(data.width, 1)
     marker.Position = UDim2.new(data.target, 0, 0, 4)
@@ -214,25 +274,36 @@ event.OnClientEvent:Connect(function(kind, data)
         coins.Text, bagCount.Text = data.coins .. " coins", #data.bag .. " fish  /  " .. bagValue() .. " coin value"
         local names = {}
         for _, category in ipairs({ "auger", "rod", "lure", "bait" }) do
-            local gear = Config.findGear(category, data.equipped[category])
-            table.insert(names, gear.name:gsub(" · 10 casts", ""))
+            table.insert(names, Config.gearName(category, data.equipped[category]))
         end
         loadout.Text = table.concat(names, "  /  ")
         if shade.Visible then render() end
     elseif kind == "notice" then notice(data)
     elseif kind == "shop" then modalMode = "shop" render() shade.Visible = true
-    elseif kind == "waiting" then
-        fishing, token, held = true, data.token, false
+    elseif kind == "stage" then
+        drillingInfo = data.stage == "drilling" and data or nil
+        progressLabel.Text = drillingInfo and "DRILL PROGRESS" or "CATCH PROGRESS"
+        tensionLabel.Visible, tensionBack.Visible = false, false
+        fishing, token, held, reelView = true, data.token, false, nil
+        keyHeld, reelPointer = false, nil
+        lockJump()
         shade.Visible, reel.Visible, track.Visible, holdButton.Visible = false, true, false, false
-        reelTitle.Text, caption.Text = "LINE IN. TAKE A BREATH.", "Listening beneath the ice..."
+        if data.stage == "drilling" then
+            reelTitle.Text, caption.Text = "CUTTING THROUGH THE ICE", "Your auger is making a permanent fishing hole."
+        elseif data.stage == "casting" then
+            reelTitle.Text, caption.Text = data.reused and "BACK TO YOUR FISHING SPOT" or "CASTING YOUR LINE", "Getting the line ready..."
+        else reelTitle.Text, caption.Text = "LINE IN. TAKE A BREATH.", "Listening beneath the ice..." end
         progressFill.Size, tensionFill.Size = UDim2.fromScale(0, 1), UDim2.fromScale(0, 1)
         castButton.Text = "CANCEL CAST  [F]"
-    elseif kind == "bite" then
-        token, track.Visible, holdButton.Visible = data.token, true, true
+    elseif kind == "bite" and data.token == token then
+        track.Visible, holdButton.Visible = true, true
+        tensionLabel.Visible, tensionBack.Visible = true, true
         reelTitle.Text = "FISH ON!"
         caption.Text = "Hold to move right. Release to drift left. Follow the gold fish."
-        drawReel(data)
-    elseif kind == "reel" then drawReel(data)
+        reelView = Reel.newView(data)
+        drawReel(Reel.viewStep(reelView, 0, held, workspace:GetServerTimeNow(), Config.Fishing))
+    elseif kind == "reel" and data.token == token and reelView then
+        Reel.receiveView(reelView, data, workspace:GetServerTimeNow(), held, Config.Fishing)
     elseif kind == "caught" then
         endFishing()
         notice("CAUGHT  " .. data.name .. "\n" .. data.rarity .. "  /  " .. data.kg .. " kg  /  " .. data.value .. " coins", Color3.fromRGB(data.color[1], data.color[2], data.color[3]))
@@ -242,6 +313,13 @@ end)
 local elapsed, lastViewport = 0, Vector2.zero
 RunService.RenderStepped:Connect(function(dt)
     elapsed = elapsed + dt
+    if drillingInfo then
+        local progress = math.max(0, math.min(1, (workspace:GetServerTimeNow() - drillingInfo.startedAt) / drillingInfo.duration))
+        progressFill.Size = UDim2.fromScale(progress, 1)
+        caption.Text = "Drilling  " .. math.floor(progress * 100) .. "%  /  Reuse this hole for future casts"
+    end
+    if reelView then drawReel(Reel.viewStep(reelView, dt, held, workspace:GetServerTimeNow(), Config.Fishing)) end
+    if shade.Visible then Preview.step(dt) end
     if token and elapsed > 0.12 then
         elapsed = 0
         send("input", { token = token, held = held })
@@ -255,7 +333,7 @@ RunService.RenderStepped:Connect(function(dt)
         local rs = reel:FindFirstChildOfClass("UIScale") or make("UIScale", reel)
         ds.Scale, rs.Scale = scale, scale
         dock.AnchorPoint, dock.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -12)
-        reel.AnchorPoint, reel.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -24 - 90 * scale)
+        reel.AnchorPoint, reel.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -24 - 126 * scale)
         guide.Visible = lastViewport.X > 850 and lastViewport.Y > 580
         brand.Visible = lastViewport.X > 490
     end

@@ -1,6 +1,7 @@
 -- Run from the repository root with Lua 5.3+ or Fengari.
 local Config = dofile("src/shared/Config.lua")
 local Reel = dofile("src/shared/Reel.lua")
+local HoleRules = dofile("src/shared/HoleRules.lua")
 local count = 0
 local function check(condition, message)
     assert(condition, message)
@@ -67,4 +68,63 @@ check(simulate(Config.Fish[1], 0, true) == "caught", "Starter rod must catch sta
 check(simulate(Config.Fish[1], 0, false) == "escaped", "Doing nothing must lose the fish")
 local timeout = { phase = 0, bar = 0.5, target = 0.5, width = 1, progress = 0.1, tension = 0 }
 check(Reel.step(timeout, 0, false, Config.Fish[1], Config.Fishing, 36) == "escaped", "Overlong encounters time out")
+
+-- Regression: gsub returns a string AND a replacement count. The HUD must
+-- receive exactly one value when appending names with table.insert.
+local names = {}
+for category, items in pairs(Config.Gear) do
+    for _, item in ipairs(items) do
+        check(select("#", Config.gearName(category, item.id)) == 1, "HUD labels must return only one value")
+        table.insert(names, Config.gearName(category, item.id))
+    end
+end
+check(Config.gearName("bait", "worms") == "Worms", "Bait labels omit pack quantities")
+
+local hole = { ownerId = 123, tier = 1, size = 3 }
+local starterSpecies = 0
+for _, fish in ipairs(Config.Fish) do if fish.tier == 1 then starterSpecies = starterSpecies + 1 end end
+check(starterSpecies >= 5, "The starter pond has at least five catchable species")
+check(HoleRules.canReuse(hole, 123, 6, Config.HoleUseDistance), "Nearby owned holes can be reused")
+check(not HoleRules.canReuse(hole, 999, 6, Config.HoleUseDistance), "Other players cannot take over a hole")
+check(not HoleRules.canReuse(hole, 123, 30, Config.HoleUseDistance), "Distant holes cannot be used remotely")
+check(not HoleRules.canReuse(nil, 123, 0, Config.HoleUseDistance), "Missing holes must be drilled")
+check(HoleRules.fishingTier(hole) == 1, "Existing hole retains its original fish tier")
+
+local function movement(fps)
+    local s = { bar = 0.35, velocity = 0, width = 0.23 }
+    for _ = 1, fps / 2 do Reel.moveBar(s, 1 / fps, true, Config.Fishing) end
+    return s.bar
+end
+check(math.abs(movement(30) - movement(120)) < 0.000001, "Control movement is frame-rate independent")
+
+local function packet(time, bar)
+    return { token = "test", bar = bar, velocity = 0, target = 0.5, width = 0.23,
+        progress = 0.25, tension = 0, phase = 1.7, difficulty = 0.7, elapsed = time, serverTime = time }
+end
+local view = Reel.newView(packet(0, 0.5))
+local movingFrames, largestStep = 0, 0
+local previous = view.bar
+for i = 1, 120 do
+    local now, held = i / 60, i < 60
+    if i % 5 == 0 then
+        local before = view.bar
+        -- Deliberately delayed, uneven packets with substantial correction.
+        Reel.receiveView(view, packet(now - 0.06, 0.45 + math.sin(now) * 0.1), now, held, Config.Fishing)
+        check(view.bar == before, "Packet receipt must never snap the displayed bar")
+    end
+    Reel.viewStep(view, 1 / 60, held, now, Config.Fishing)
+    local delta = math.abs(view.bar - previous)
+    largestStep = math.max(largestStep, delta)
+    if delta > 0.00001 then movingFrames = movingFrames + 1 end
+    check(view.bar >= view.width / 2 and view.bar <= 1 - view.width / 2, "The full control zone stays on screen")
+    previous = view.bar
+end
+check(movingFrames > 100, "The reel animates between network updates")
+check(largestStep < 0.03, "Corrections are spread across frames")
+local current = view.snapshot
+Reel.receiveView(view, packet(0, 0.1), 2, false, Config.Fishing)
+check(view.snapshot == current, "Stale packets cannot rewind the minigame")
+local localView = Reel.newView(packet(0, 0.5))
+Reel.viewStep(localView, 1 / 60, true, 1 / 60, Config.Fishing)
+check(localView.bar > 0.5, "Input responds before a server packet arrives")
 print("PASS: " .. count .. " gameplay checks, including 62,000 fish selections and reel simulations")
