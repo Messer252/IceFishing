@@ -1,0 +1,6 @@
+dist/*
+!dist/FrostbiteFishing.rbxlx
+*.rbxl.lock
+*.rbxlx.lock
+.DS_Store
+__pycache__/

@@ -1,0 +1,808 @@
+<?xml version='1.0' encoding='utf-8'?>
+<roblox version="4">
+  <External>null</External>
+  <External>nil</External>
+  <Item class="Workspace" referent="RBX1">
+    <Properties>
+      <string name="Name">Workspace</string>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="RBX2">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="RBX3">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="ModuleScript" referent="RBX4">
+        <Properties>
+          <string name="Name">Config</string>
+          <ProtectedString name="Source">local Config = {}
+
+Config.StartingCoins = 120
+Config.Pond = { CenterX = 0, CenterZ = 0, Radius = 68, SurfaceY = 2 }
+Config.ShopPosition = { X = 0, Z = -92 }
+Config.ShopDistance = 23
+Config.HoleLifetime = 180
+Config.Fishing = {
+    Tick = 0.08, BarSpeed = 0.55, Gravity = 0.36,
+    BaseWidth = 0.23, Gain = 0.16, Loss = 0.07,
+    TensionGain = 0.22, TensionLoss = 0.33, Timeout = 35,
+}
+
+-- Costs are one-time unlocks. Bait packs are consumed on each cast.
+Config.Gear = {
+    auger = {
+        { id = "hand", name = "Hand Auger", cost = 0, tier = 1, size = 3, luck = 0, description = "A small hole for pond fish." },
+        { id = "steel", name = "Steel Auger", cost = 180, tier = 2, size = 4.5, luck = 0.2, description = "Wider holes unlock uncommon fish." },
+        { id = "power", name = "Power Auger", cost = 650, tier = 3, size = 6, luck = 0.5, description = "Reach rare fish below the ice." },
+        { id = "arctic", name = "Arctic Auger", cost = 1800, tier = 4, size = 8, luck = 0.8, description = "The deepest water hides legendary fish." },
+    },
+    rod = {
+        { id = "twig", name = "Starter Rod", cost = 0, luck = 0, control = 0, description = "Simple, sturdy, and ready to fish." },
+        { id = "birch", name = "Birch Rod", cost = 140, luck = 0.25, control = 0.035, description = "A little more luck and reel control." },
+        { id = "carbon", name = "Carbon Rod", cost = 500, luck = 0.65, control = 0.07, description = "Better odds and a wider catch zone." },
+        { id = "glacier", name = "Glacier Rod", cost = 1500, luck = 1.1, control = 0.11, description = "Premium control for elusive fish." },
+    },
+    lure = {
+        { id = "plain", name = "Plain Hook", cost = 0, luck = 0, description = "Your trusty starter hook." },
+        { id = "copper", name = "Copper Spoon", cost = 110, luck = 0.3, description = "A flash of copper attracts better fish." },
+        { id = "silver", name = "Silver Spinner", cost = 400, luck = 0.7, description = "An irresistible glimmer under the ice." },
+        { id = "aurora", name = "Aurora Jig", cost = 1200, luck = 1.2, description = "A shimmering lure for prized catches." },
+    },
+    bait = {
+        { id = "bread", name = "Bread Crumbs", cost = 0, luck = 0, amount = 0, description = "Unlimited free bait." },
+        { id = "worms", name = "Worms · 10 casts", cost = 35, luck = 0.5, amount = 10, description = "Fresh bait improves rare-fish odds." },
+        { id = "minnows", name = "Minnows · 10 casts", cost = 100, luck = 1.15, amount = 10, description = "Live bait for the biggest predators." },
+    },
+}
+
+Config.Fish = {
+    { id = "perch", name = "Yellow Perch", rarity = "Common", tier = 1, weight = 52, value = 25, kg = 0.6, difficulty = 0.70, color = { 228, 188, 86 } },
+    { id = "bluegill", name = "Frost Bluegill", rarity = "Common", tier = 1, weight = 35, value = 35, kg = 0.9, difficulty = 0.85, color = { 107, 181, 210 } },
+    { id = "trout", name = "Rainbow Trout", rarity = "Uncommon", tier = 2, weight = 19, value = 80, kg = 2.2, difficulty = 1.05, color = { 122, 215, 160 } },
+    { id = "walleye", name = "Ice Walleye", rarity = "Uncommon", tier = 2, weight = 13, value = 110, kg = 3.4, difficulty = 1.15, color = { 122, 215, 160 } },
+    { id = "pike", name = "Northern Pike", rarity = "Rare", tier = 3, weight = 7, value = 230, kg = 6.5, difficulty = 1.30, color = { 121, 157, 255 } },
+    { id = "char", name = "Arctic Char", rarity = "Rare", tier = 3, weight = 4, value = 340, kg = 4.5, difficulty = 1.45, color = { 121, 157, 255 } },
+    { id = "sturgeon", name = "Glacier Sturgeon", rarity = "Legendary", tier = 4, weight = 1.2, value = 900, kg = 18, difficulty = 1.65, color = { 248, 197, 92 } },
+    { id = "spirit", name = "Aurora Spiritfish", rarity = "Legendary", tier = 4, weight = 0.45, value = 1600, kg = 8, difficulty = 1.85, color = { 219, 145, 255 } },
+}
+
+function Config.findGear(category, id)
+    for _, item in ipairs(Config.Gear[category] or {}) do
+        if item.id == id then return item end
+    end
+    return nil
+end
+
+function Config.weightFor(fish, luck)
+    -- Value adds a small quality boost within a tier, so starter-pond gear
+    -- upgrades help even before a player unlocks the next auger.
+    local quality = fish.tier - 1 + math.log(fish.value / 25) * 0.2
+    return fish.weight * (1 + math.max(0, luck) * quality * 0.75)
+end
+
+-- Accepts an injected [0, 1) roll to make the selection logic testable.
+function Config.selectFish(tier, luck, roll)
+    local total = 0
+    for _, fish in ipairs(Config.Fish) do
+        if fish.tier &lt;= tier then total = total + Config.weightFor(fish, luck) end
+    end
+    local target = math.max(0, math.min(0.999999, roll)) * total
+    for _, fish in ipairs(Config.Fish) do
+        if fish.tier &lt;= tier then
+            target = target - Config.weightFor(fish, luck)
+            if target &lt; 0 then return fish end
+        end
+    end
+    return Config.Fish[1]
+end
+
+return Config
+</ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX5">
+        <Properties>
+          <string name="Name">Reel</string>
+          <ProtectedString name="Source">local Reel = {}
+
+-- The server advances this simulation; clients only submit hold/release input.
+function Reel.step(state, dt, held, fish, settings, elapsed)
+    state.bar = math.max(0, math.min(1, state.bar + (held and settings.BarSpeed or -settings.Gravity) * dt))
+    state.target = math.max(0.08, math.min(0.92,
+        0.5 + math.sin(elapsed * fish.difficulty * 1.9 + state.phase) * 0.28
+        + math.sin(elapsed * fish.difficulty * 3.7 + state.phase * 0.7) * 0.12))
+    local inside = math.abs(state.bar - state.target) &lt;= state.width / 2
+    state.progress = math.max(0, math.min(1, state.progress + (inside and settings.Gain or -settings.Loss) * dt))
+    state.tension = math.max(0, math.min(1, state.tension + (inside and -settings.TensionLoss or settings.TensionGain) * dt))
+    if state.progress &gt;= 1 then return "caught" end
+    if state.tension &gt;= 1 or elapsed &gt;= settings.Timeout then return "escaped" end
+    return nil
+end
+
+return Reel
+</ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="RBX6">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Folder" referent="RBX7">
+      <Properties>
+        <string name="Name">Server</string>
+      </Properties>
+      <Item class="Script" referent="RBX8">
+        <Properties>
+          <string name="Name">Game</string>
+          <ProtectedString name="Source">local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local Config = require(ReplicatedStorage.Shared.Config)
+local Reel = require(ReplicatedStorage.Shared.Reel)
+local World = require(script.Parent.World)
+
+local world, shopPrompt = World.build(Config)
+local remotes = Instance.new("Folder")
+remotes.Name, remotes.Parent = "FishingRemotes", ReplicatedStorage
+local command = Instance.new("RemoteEvent")
+command.Name, command.Parent = "Command", remotes
+local event = Instance.new("RemoteEvent")
+event.Name, event.Parent = "Event", remotes
+local rng = Random.new()
+local profiles, sessions, holes, limits = {}, {}, {}, {}
+
+local function notify(player, message)
+    event:FireClient(player, "notice", message)
+end
+
+local function rootOf(player)
+    local character = player.Character
+    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health &lt;= 0 then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function nearShop(player)
+    local root = rootOf(player)
+    return root and (root.Position - Vector3.new(Config.ShopPosition.X, root.Position.Y, Config.ShopPosition.Z)).Magnitude &lt; Config.ShopDistance
+        and math.abs(root.Position.Y - 4) &lt; 15
+end
+
+local function onPond(player)
+    local root = rootOf(player)
+    return root and Vector2.new(root.Position.X, root.Position.Z).Magnitude &lt; Config.Pond.Radius - 5
+        and math.abs(root.Position.Y - Config.Pond.SurfaceY) &lt; 8
+end
+
+local function pushProfile(player)
+    local p = profiles[player]
+    if not p then return end
+    player.leaderstats.Coins.Value = p.coins
+    player.leaderstats.Fish.Value = #p.bag
+    event:FireClient(player, "profile", p)
+end
+
+local function removeHole(player)
+    if holes[player] then holes[player].model:Destroy() holes[player] = nil end
+end
+
+local function finish(player, outcome, message)
+    local s = sessions[player]
+    if not s then return end
+    sessions[player] = nil
+    if s.rod then s.rod:Destroy() end
+    if outcome == "caught" and profiles[player] then
+        local fish = s.fish
+        local kg = math.floor(fish.kg * rng:NextNumber(0.65, 1.5) * 100) / 100
+        local value = math.floor(fish.value * kg / fish.kg)
+        local catch = { name = fish.name, rarity = fish.rarity, kg = kg, value = value, color = fish.color }
+        table.insert(profiles[player].bag, catch)
+        pushProfile(player)
+        event:FireClient(player, "caught", catch)
+    else
+        event:FireClient(player, "ended", message or "The fish escaped. Try another cast!")
+    end
+end
+
+local function buy(player, data)
+    if not nearShop(player) then notify(player, "Visit Frostbite Tackle by the pond to buy gear.") return end
+    if sessions[player] then notify(player, "Finish your cast first.") return end
+    if type(data) ~= "table" or type(data.category) ~= "string" or type(data.id) ~= "string" then return end
+    local item = Config.findGear(data.category, data.id)
+    local p = profiles[player]
+    if not item then return end
+    if data.category == "bait" then
+        if item.amount == 0 then p.equipped.bait = item.id
+        elseif (p.bait[item.id] or 0) &gt; 0 and data.equip == true then p.equipped.bait = item.id
+        else
+            if p.coins &lt; item.cost then notify(player, "You need more coins for that bait pack.") return end
+            p.coins = p.coins - item.cost
+            p.bait[item.id] = (p.bait[item.id] or 0) + item.amount
+            p.equipped.bait = item.id
+        end
+    else
+        if not p.owned[data.category][item.id] then
+            if p.coins &lt; item.cost then notify(player, "Catch and sell more fish to afford this gear.") return end
+            p.coins = p.coins - item.cost
+            p.owned[data.category][item.id] = true
+        end
+        p.equipped[data.category] = item.id
+        if data.category == "auger" then removeHole(player) end
+    end
+    pushProfile(player)
+    notify(player, item.name .. " equipped.")
+end
+
+local function cast(player)
+    if sessions[player] then notify(player, "You're already fishing. Use Cancel to stop.") return end
+    if not onPond(player) then notify(player, "Walk onto the frozen pond first, then drill a hole.") return end
+    local p, root = profiles[player], rootOf(player)
+    if #p.bag &gt;= 100 then notify(player, "Your fish bag is full. Sell your catch at the shop.") return end
+    local auger = Config.findGear("auger", p.equipped.auger)
+    local rod = Config.findGear("rod", p.equipped.rod)
+    local lure = Config.findGear("lure", p.equipped.lure)
+    local bait = Config.findGear("bait", p.equipped.bait)
+    if bait.amount &gt; 0 and (p.bait[bait.id] or 0) &lt;= 0 then
+        bait = Config.Gear.bait[1]
+        p.equipped.bait = bait.id
+    end
+    local direction = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+    if direction.Magnitude &lt; 0.1 then direction = Vector3.new(0, 0, 1) else direction = direction.Unit end
+    local position = root.Position + direction * (auger.size / 2 + 2)
+    if Vector2.new(position.X, position.Z).Magnitude &gt; Config.Pond.Radius - auger.size / 2 - 1 then
+        notify(player, "Move closer to the middle of the pond to drill safely.") return
+    end
+    for owner, hole in pairs(holes) do
+        if owner ~= player and (hole.position - Vector3.new(position.X, 2, position.Z)).Magnitude &lt; (hole.size + auger.size) / 2 + 2 then
+            notify(player, "Give the other fishing hole a little room.") return
+        end
+    end
+    removeHole(player)
+    position = Vector3.new(position.X, 2, position.Z)
+    holes[player] = { model = World.hole(world, position, auger.size, player), position = position, size = auger.size, expires = os.clock() + Config.HoleLifetime }
+    if bait.amount &gt; 0 then p.bait[bait.id] = p.bait[bait.id] - 1 end
+    local fish = Config.selectFish(auger.tier, auger.luck + rod.luck + lure.luck + bait.luck, rng:NextNumber())
+    local rodModel, rodPart = World.rod(player.Character)
+    if rodPart then
+        local tip = Instance.new("Attachment")
+        tip.Position, tip.Parent = Vector3.new(0, 2.5, 0), rodPart
+        local anchor = Instance.new("Attachment")
+        anchor.Parent = holes[player].model.DarkWater
+        local beam = Instance.new("Beam")
+        beam.Attachment0, beam.Attachment1 = tip, anchor
+        beam.Width0, beam.Width1, beam.FaceCamera = 0.035, 0.035, true
+        beam.Color, beam.Parent = ColorSequence.new(Color3.fromRGB(225, 239, 244)), rodPart
+    end
+    local token = HttpService:GenerateGUID(false)
+    local s = { token = token, phase = rng:NextNumber(0, 6), fish = fish, bar = 0.5, target = 0.5,
+        progress = 0.25, tension = 0, width = Config.Fishing.BaseWidth + rod.control,
+        held = false, elapsed = 0, accumulator = 0, position = root.Position,
+        rod = rodModel, stage = "waiting" }
+    sessions[player] = s
+    pushProfile(player)
+    event:FireClient(player, "waiting", { token = token, hole = auger.size })
+    task.delay(rng:NextNumber(1.8, 4.2), function()
+        if sessions[player] ~= s then return end
+        if not onPond(player) then finish(player, "escaped", "Your cast was interrupted.") return end
+        s.stage = "reeling"
+        event:FireClient(player, "bite", { token = token, width = s.width, bar = s.bar, target = s.target, progress = s.progress, tension = 0 })
+    end)
+end
+
+command.OnServerEvent:Connect(function(player, action, data)
+    if not profiles[player] or type(action) ~= "string" then return end
+    local now = os.clock()
+    limits[player] = limits[player] or {}
+    local interval = action == "input" and 0.025 or 0.25
+    if now - (limits[player][action] or -math.huge) &lt; interval then return end
+    limits[player][action] = now
+    if action == "ready" then pushProfile(player)
+    elseif action == "shop" then
+        if nearShop(player) then event:FireClient(player, "shop") else notify(player, "The tackle shop is in the cabin by the pond.") end
+    elseif action == "buy" then buy(player, data)
+    elseif action == "sell" then
+        if not nearShop(player) or sessions[player] then notify(player, "Visit the shop after finishing your cast to sell fish.") return end
+        local p, value = profiles[player], 0
+        for _, fish in ipairs(p.bag) do value = value + fish.value end
+        p.bag, p.coins = {}, p.coins + value
+        pushProfile(player)
+        notify(player, value &gt; 0 and ("Sold your catch for " .. value .. " coins!") or "Your bag is empty. Head to the pond!")
+    elseif action == "cast" then cast(player)
+    elseif action == "cancel" then finish(player, "escaped", "Cast cancelled. Used bait is not refunded.")
+    elseif action == "input" then
+        local s = sessions[player]
+        if s and type(data) == "table" and data.token == s.token and type(data.held) == "boolean" then s.held = data.held end
+    end
+end)
+
+shopPrompt.Triggered:Connect(function(player)
+    if profiles[player] and nearShop(player) then event:FireClient(player, "shop") end
+end)
+
+local function addPlayer(player)
+    if profiles[player] then return end
+    profiles[player] = { coins = Config.StartingCoins, bag = {}, bait = { worms = 0, minnows = 0 },
+        equipped = { auger = "hand", rod = "twig", lure = "plain", bait = "bread" },
+        owned = { auger = { hand = true }, rod = { twig = true }, lure = { plain = true } } }
+    local stats = Instance.new("Folder")
+    stats.Name, stats.Parent = "leaderstats", player
+    for _, name in ipairs({ "Coins", "Fish" }) do
+        local value = Instance.new("IntValue")
+        value.Name, value.Parent = name, stats
+    end
+    pushProfile(player)
+    player.CharacterRemoving:Connect(function()
+        finish(player, "escaped", "Cast interrupted. Head back to the pond!")
+        removeHole(player)
+    end)
+end
+
+Players.PlayerAdded:Connect(addPlayer)
+for _, player in ipairs(Players:GetPlayers()) do addPlayer(player) end
+Players.PlayerRemoving:Connect(function(player)
+    local s = sessions[player]
+    if s and s.rod then s.rod:Destroy() end
+    sessions[player], profiles[player], limits[player] = nil, nil, nil
+    removeHole(player)
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    for player, s in pairs(sessions) do
+        local root = rootOf(player)
+        if not root or (root.Position - s.position).Magnitude &gt; 8 then
+            finish(player, "escaped", "Stay by your hole while fishing.")
+        elseif s.stage == "reeling" then
+            -- Bound lag spikes instead of awarding progress for a stalled server.
+            local step = math.min(dt, 0.1)
+            s.elapsed, s.accumulator = s.elapsed + step, s.accumulator + step
+            local outcome = Reel.step(s, step, s.held, s.fish, Config.Fishing, s.elapsed)
+            if outcome then finish(player, outcome)
+            elseif s.accumulator &gt;= Config.Fishing.Tick then
+                s.accumulator = 0
+                event:FireClient(player, "reel", { bar = s.bar, target = s.target, width = s.width, progress = s.progress, tension = s.tension })
+            end
+        end
+    end
+    for player, hole in pairs(holes) do
+        if not sessions[player] and os.clock() &gt; hole.expires then removeHole(player) end
+    end
+end)
+</ProtectedString>
+        </Properties>
+      </Item>
+      <Item class="ModuleScript" referent="RBX9">
+        <Properties>
+          <string name="Name">World</string>
+          <ProtectedString name="Source">local World = {}
+local Lighting = game:GetService("Lighting")
+
+local function part(parent, name, size, position, color, material)
+    local p = Instance.new("Part")
+    p.Name, p.Size, p.Position = name, size, position
+    p.Anchored, p.Color = true, color
+    p.Material = material or Enum.Material.SmoothPlastic
+    p.TopSurface, p.BottomSurface = Enum.SurfaceType.Smooth, Enum.SurfaceType.Smooth
+    p.Parent = parent
+    return p
+end
+
+local function label(adornee, text, color, size)
+    local board = Instance.new("BillboardGui")
+    board.Size = UDim2.fromOffset(size or 230, 65)
+    board.StudsOffset = Vector3.new(0, 3, 0)
+    board.MaxDistance, board.AlwaysOnTop = 100, false
+    board.Adornee, board.Parent = adornee, adornee
+    local t = Instance.new("TextLabel")
+    t.Size, t.BackgroundTransparency = UDim2.fromScale(1, 1), 1
+    t.Text, t.TextColor3 = text, color
+    t.TextSize, t.Font = 21, Enum.Font.GothamBold
+    t.TextStrokeTransparency = 0.65
+    t.Parent = board
+end
+
+function World.build(config)
+    local old = workspace:FindFirstChild("FrostbiteWorld")
+    if old then old:Destroy() end
+    local world = Instance.new("Folder")
+    world.Name, world.Parent = "FrostbiteWorld", workspace
+    Lighting.ClockTime, Lighting.Brightness = 14, 2
+    Lighting.Ambient = Color3.fromRGB(140, 166, 190)
+    Lighting.OutdoorAmbient = Color3.fromRGB(165, 187, 207)
+    Lighting.FogColor, Lighting.FogStart, Lighting.FogEnd = Color3.fromRGB(197, 219, 235), 210, 580
+    local sky = Instance.new("Atmosphere")
+    sky.Density, sky.Color, sky.Decay = 0.22, Color3.fromRGB(199, 222, 240), Color3.fromRGB(135, 168, 195)
+    sky.Parent = Lighting
+
+    part(world, "Snowfield", Vector3.new(420, 8, 420), Vector3.new(0, -4, 0), Color3.fromRGB(233, 241, 245), Enum.Material.Snow)
+    local pond = part(world, "FrozenPond", Vector3.new(2, 136, 136), Vector3.new(0, 1, 0), Color3.fromRGB(145, 201, 219), Enum.Material.Ice)
+    pond.Shape, pond.Orientation, pond.Reflectance = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), 0.15
+    local rng = Random.new(2026)
+    -- Thin pale cracks across the frozen surface, kept non-colliding.
+    for i = 1, 30 do
+        local angle, radius = rng:NextNumber(0, math.pi * 2), rng:NextNumber(6, 59)
+        local crack = part(world, "IceVein", Vector3.new(rng:NextNumber(3, 11), 0.015, 0.09),
+            Vector3.new(math.cos(angle) * radius, 2.012, math.sin(angle) * radius), Color3.fromRGB(209, 238, 245), Enum.Material.Ice)
+        crack.Orientation, crack.CanCollide, crack.CanQuery = Vector3.new(0, rng:NextNumber(0, 360), 0), false, false
+    end
+    for i = 1, 58 do
+        local angle = i * math.pi * 2 / 58 + rng:NextNumber(-0.04, 0.04)
+        local radius = rng:NextNumber(87, 175)
+        local x, z = math.cos(angle) * radius, math.sin(angle) * radius
+        if not (math.abs(x) &lt; 29 and z &lt; -65) then
+            local height = rng:NextNumber(16, 29)
+            part(world, "PineTrunk", Vector3.new(2.1, height * 0.6, 2.1), Vector3.new(x, height * 0.3, z), Color3.fromRGB(90, 71, 59), Enum.Material.Wood)
+            for level = 1, 3 do
+                local width = (4 - level) * 3.5
+                local leaf = part(world, "PineBoughs", Vector3.new(width, height * 0.32, width), Vector3.new(x, height * (0.30 + level * 0.19), z), Color3.fromRGB(45 + level * 8, 89 + level * 6, 82 + level * 5), Enum.Material.Grass)
+                leaf.Shape = Enum.PartType.Ball
+                local snow = part(world, "PineSnow", Vector3.new(width * 0.92, height * 0.15, width * 0.92), leaf.Position + Vector3.new(0, height * 0.1, 0), Color3.fromRGB(238, 246, 250), Enum.Material.Snow)
+                snow.Shape = Enum.PartType.Ball
+            end
+        end
+    end
+
+    local shop = Instance.new("Model")
+    shop.Name, shop.Parent = "TackleShop", world
+    part(shop, "Floor", Vector3.new(32, 1, 23), Vector3.new(0, 0.5, -96), Color3.fromRGB(124, 94, 72), Enum.Material.WoodPlanks)
+    part(shop, "BackWall", Vector3.new(32, 15, 1), Vector3.new(0, 8, -107), Color3.fromRGB(111, 74, 54), Enum.Material.WoodPlanks)
+    for _, x in ipairs({ -15.5, 15.5 }) do
+        part(shop, "SideWall", Vector3.new(1, 15, 23), Vector3.new(x, 8, -96), Color3.fromRGB(111, 74, 54), Enum.Material.WoodPlanks)
+        part(shop, "PorchPost", Vector3.new(1.2, 15, 1.2), Vector3.new(x, 8, -82), Color3.fromRGB(85, 59, 47), Enum.Material.Wood)
+    end
+    part(shop, "Roof", Vector3.new(36, 2, 30), Vector3.new(0, 16, -94), Color3.fromRGB(226, 238, 242), Enum.Material.Snow)
+    local counter = part(shop, "Counter", Vector3.new(24, 4, 3), Vector3.new(0, 3, -96), Color3.fromRGB(161, 112, 76), Enum.Material.WoodPlanks)
+    label(counter, "FROSTBITE TACKLE\nGEAR  /  BAIT  /  SELL FISH", Color3.fromRGB(255, 224, 163), 340)
+    local promptPart = part(shop, "ShopPrompt", Vector3.new(1, 1, 1), Vector3.new(0, 4, -87), Color3.new(1, 1, 1))
+    promptPart.Transparency, promptPart.CanCollide = 1, false
+    local prompt = Instance.new("ProximityPrompt")
+    prompt.ActionText, prompt.ObjectText = "Shop &amp; sell fish", "Frostbite Tackle"
+    prompt.MaxActivationDistance, prompt.HoldDuration, prompt.RequiresLineOfSight = 18, 0, false
+    prompt.Parent = promptPart
+    local light = Instance.new("PointLight")
+    light.Color, light.Range, light.Brightness, light.Parent = Color3.fromRGB(255, 209, 137), 35, 1.8, counter
+
+    local spawn = Instance.new("SpawnLocation")
+    spawn.Name, spawn.Size, spawn.Position = "LakesideSpawn", Vector3.new(10, 1, 8), Vector3.new(0, 0.5, -73)
+    spawn.Anchored, spawn.Neutral, spawn.Duration = true, true, 0
+    spawn.Color, spawn.Material, spawn.Parent = Color3.fromRGB(220, 232, 237), Enum.Material.Snow, world
+    local sign = part(world, "PondSign", Vector3.new(12, 5, 0.7), Vector3.new(19, 5, -71), Color3.fromRGB(67, 95, 100), Enum.Material.Wood)
+    label(sign, "FROSTBITE POND\nWalk onto the ice to drill", Color3.fromRGB(228, 245, 250), 300)
+
+    -- An impassable natural edge keeps players inside the playable snowfield.
+    for i = 1, 24 do
+        local angle = i * math.pi * 2 / 24
+        local rock = part(world, "SnowyRidge", Vector3.new(57, 45 + (i % 4) * 7, 44), Vector3.new(math.cos(angle) * 207, 15, math.sin(angle) * 207), Color3.fromRGB(191, 211, 222), Enum.Material.Slate)
+        rock.Shape = Enum.PartType.Ball
+    end
+    return world, prompt
+end
+
+function World.hole(parent, position, diameter, owner)
+    local model = Instance.new("Model")
+    model.Name, model.Parent = "Hole_" .. owner.UserId, parent
+    local rim = part(model, "SnowRim", Vector3.new(0.1, diameter + 0.65, diameter + 0.65), Vector3.new(position.X, 2.04, position.Z), Color3.fromRGB(231, 249, 251), Enum.Material.Snow)
+    rim.Shape, rim.Orientation, rim.CanCollide = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), false
+    local water = part(model, "DarkWater", Vector3.new(0.12, diameter, diameter), Vector3.new(position.X, 2.11, position.Z), Color3.fromRGB(19, 57, 76), Enum.Material.Glass)
+    water.Shape, water.Orientation, water.CanCollide, water.Reflectance = Enum.PartType.Cylinder, Vector3.new(0, 0, 90), false, 0.2
+    return model
+end
+
+function World.rod(character)
+    local hand = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
+    if not hand then return nil end
+    local model = Instance.new("Model")
+    model.Name, model.Parent = "FishingRod", character
+    local rod = part(model, "Rod", Vector3.new(0.12, 5, 0.12), Vector3.new(0, 0, 0), Color3.fromRGB(185, 116, 62), Enum.Material.Wood)
+    rod.Anchored, rod.CanCollide, rod.Massless = false, false, true
+    rod.CFrame = hand.CFrame * CFrame.new(0, -1, -1.9) * CFrame.Angles(math.rad(-65), 0, 0)
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0, weld.Part1, weld.Parent = hand, rod, rod
+    return model, rod
+end
+
+return World
+</ProtectedString>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="RBX10">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="RBX11">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="Folder" referent="RBX12">
+        <Properties>
+          <string name="Name">Client</string>
+        </Properties>
+        <Item class="LocalScript" referent="RBX13">
+          <Properties>
+            <string name="Name">Game</string>
+            <ProtectedString name="Source">local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+local remotes = ReplicatedStorage:WaitForChild("FishingRemotes")
+local command, event = remotes:WaitForChild("Command"), remotes:WaitForChild("Event")
+local C = {
+    panel = Color3.fromRGB(20, 41, 54), card = Color3.fromRGB(32, 57, 71),
+    text = Color3.fromRGB(232, 245, 249), muted = Color3.fromRGB(167, 196, 208),
+    mint = Color3.fromRGB(131, 230, 201), gold = Color3.fromRGB(255, 213, 136),
+    red = Color3.fromRGB(248, 134, 137), dark = Color3.fromRGB(16, 33, 44),
+}
+local gui = Instance.new("ScreenGui")
+gui.Name, gui.ResetOnSpawn, gui.ZIndexBehavior = "FrostbiteUI", false, Enum.ZIndexBehavior.Sibling
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local function make(class, parent, props)
+    local object = Instance.new(class)
+    for k, v in pairs(props or {}) do object[k] = v end
+    object.Parent = parent
+    return object
+end
+local function rounded(object, radius)
+    make("UICorner", object, { CornerRadius = UDim.new(0, radius or 12) })
+end
+local function frame(parent, size, position, color)
+    local f = make("Frame", parent, { Size = size, Position = position, BackgroundColor3 = color or C.panel, BorderSizePixel = 0 })
+    rounded(f)
+    return f
+end
+local function text(parent, value, size, position, fontSize, color)
+    return make("TextLabel", parent, { Text = value, Size = size, Position = position,
+        BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = fontSize or 15,
+        TextColor3 = color or C.text, TextXAlignment = Enum.TextXAlignment.Left, TextWrapped = true })
+end
+local function button(parent, value, size, position, callback, color)
+    local b = make("TextButton", parent, { Text = value, Size = size, Position = position,
+        BackgroundColor3 = color or C.mint, TextColor3 = C.dark, BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold, TextSize = 14, AutoButtonColor = true })
+    rounded(b, 9)
+    if callback then b.Activated:Connect(callback) end
+    return b
+end
+local function send(action, data) command:FireServer(action, data) end
+local profile, activeTab, modalMode = nil, "auger", "shop"
+local fishing, token, held = false, nil, false
+
+local brand = frame(gui, UDim2.fromOffset(252, 76), UDim2.fromOffset(16, 16))
+text(brand, "F R O S T B I T E", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 20, C.mint).Font = Enum.Font.GothamBold
+text(brand, "ICE FISHING  /  FROZEN WILDERNESS", UDim2.new(1, -28, 0, 20), UDim2.fromOffset(14, 43), 10, C.muted)
+local wallet = frame(gui, UDim2.fromOffset(190, 76), UDim2.new(1, -206, 0, 16))
+local coins = text(wallet, "120 coins", UDim2.new(1, -24, 0, 30), UDim2.fromOffset(12, 9), 21, C.gold)
+coins.Font = Enum.Font.GothamBold
+local bagCount = text(wallet, "0 fish in bag", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 43), 13, C.muted)
+local guide = frame(gui, UDim2.fromOffset(246, 167), UDim2.fromOffset(16, 108))
+text(guide, "A QUIET DAY ON THE ICE", UDim2.fromOffset(218, 26), UDim2.fromOffset(14, 10), 12, C.gold).Font = Enum.Font.GothamBold
+text(guide, "01  Walk onto the frozen pond\n02  Drill a hole and cast your line\n03  Hold to follow the moving fish\n04  Sell fish at the cabin for gear", UDim2.fromOffset(218, 110), UDim2.fromOffset(14, 43), 14, C.muted)
+
+local dock = frame(gui, UDim2.fromOffset(468, 90), UDim2.new(0.5, -234, 1, -106))
+local castButton = button(dock, "DRILL &amp; FISH  [F]", UDim2.fromOffset(208, 42), UDim2.fromOffset(12, 10), function() send(fishing and "cancel" or "cast") end)
+button(dock, "SHOP  [B]", UDim2.fromOffset(108, 42), UDim2.fromOffset(230, 10), function() send("shop") end, C.gold)
+local openBag
+button(dock, "BAG  [I]", UDim2.fromOffset(108, 42), UDim2.fromOffset(348, 10), function() if openBag then openBag() end end, Color3.fromRGB(191, 218, 232))
+local loadout = text(dock, "Walk onto the ice to begin", UDim2.new(1, -24, 0, 20), UDim2.fromOffset(12, 60), 11, C.muted)
+loadout.TextXAlignment = Enum.TextXAlignment.Center
+
+local toast = frame(gui, UDim2.new(0.8, 0, 0, 72), UDim2.new(0.1, 0, 0, 104))
+toast.Visible = false
+make("UISizeConstraint", toast, { MaxSize = Vector2.new(580, 90) })
+toast.AnchorPoint, toast.Position = Vector2.new(0.5, 0), UDim2.new(0.5, 0, 0, 104)
+local toastText = text(toast, "", UDim2.new(1, -28, 1, -16), UDim2.fromOffset(14, 8), 16)
+toastText.TextXAlignment = Enum.TextXAlignment.Center
+local toastId = 0
+local function notice(message, color)
+    toastId = toastId + 1
+    local id = toastId
+    toastText.Text, toastText.TextColor3, toast.Visible = message, color or C.text, true
+    task.delay(4.5, function() if toastId == id then toast.Visible = false end end)
+end
+
+local shade = make("TextButton", gui, { Text = "", Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.4, BorderSizePixel = 0, Visible = false, AutoButtonColor = false })
+local modal = frame(shade, UDim2.fromOffset(650, 530), UDim2.fromScale(0.5, 0.5))
+modal.AnchorPoint = Vector2.new(0.5, 0.5)
+local modalScale = make("UIScale", modal, { Scale = 1 })
+local modalTitle = text(modal, "FROSTBITE TACKLE", UDim2.fromOffset(490, 34), UDim2.fromOffset(22, 16), 23, C.gold)
+modalTitle.Font = Enum.Font.GothamBold
+local modalSubtitle = text(modal, "Better gear. Bigger holes. Rarer fish.", UDim2.fromOffset(540, 24), UDim2.fromOffset(22, 52), 14, C.muted)
+button(modal, "X", UDim2.fromOffset(36, 36), UDim2.new(1, -54, 0, 18), function() shade.Visible = false end, Color3.fromRGB(181, 203, 213))
+local tabs = frame(modal, UDim2.new(1, -44, 0, 40), UDim2.fromOffset(22, 88), C.dark)
+local list = make("ScrollingFrame", modal, { Size = UDim2.new(1, -44, 1, -208), Position = UDim2.fromOffset(22, 140), BackgroundTransparency = 1,
+    BorderSizePixel = 0, CanvasSize = UDim2.fromOffset(0, 0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ScrollBarThickness = 4, ScrollBarImageColor3 = C.muted })
+make("UIListLayout", list, { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder })
+make("UIPadding", list, { PaddingBottom = UDim.new(0, 6), PaddingRight = UDim.new(0, 8) })
+local sell = button(modal, "SELL ALL FISH", UDim2.new(1, -44, 0, 40), UDim2.new(0, 22, 1, -54), function() send("sell") end, C.gold)
+local tabButtons, render = {}, nil
+for i, category in ipairs({ "auger", "rod", "bait", "lure" }) do
+    tabButtons[category] = button(tabs, string.upper(category) .. "S", UDim2.new(0.25, -6, 1, -8), UDim2.new((i - 1) * 0.25, 3, 0, 4), function()
+        activeTab = category
+        if render then render() end
+    end, C.card)
+end
+
+local function bagValue()
+    local sum = 0
+    if profile then for _, fish in ipairs(profile.bag) do sum = sum + fish.value end end
+    return sum
+end
+
+render = function()
+    for _, child in ipairs(list:GetChildren()) do if child:IsA("Frame") or child:IsA("TextLabel") then child:Destroy() end end
+    if not profile then return end
+    local isShop = modalMode == "shop"
+    tabs.Visible = isShop
+    modalTitle.Text = isShop and "FROSTBITE TACKLE" or "YOUR FISH BAG"
+    modalSubtitle.Text = isShop and ("Balance: " .. profile.coins .. " coins  /  Purchases auto-equip") or "Bring your catch to the cabin to sell it."
+    list.Position = UDim2.fromOffset(22, isShop and 140 or 90)
+    list.Size = UDim2.new(1, -44, 1, isShop and -208 or -158)
+    sell.Text = "SELL ALL FISH  /  " .. bagValue() .. " COINS"
+    for category, b in pairs(tabButtons) do
+        b.BackgroundColor3 = category == activeTab and C.mint or C.card
+        b.TextColor3 = category == activeTab and C.dark or C.muted
+    end
+    if isShop then
+        for i, item in ipairs(Config.Gear[activeTab]) do
+            local category = activeTab
+            local card = frame(list, UDim2.new(1, 0, 0, 100), UDim2.fromOffset(0, 0), C.card)
+            card.LayoutOrder = i
+            text(card, item.name, UDim2.new(1, -166, 0, 28), UDim2.fromOffset(14, 8), 17).Font = Enum.Font.GothamBold
+            text(card, item.description, UDim2.new(1, -175, 0, 43), UDim2.fromOffset(14, 38), 13, C.muted)
+            local equipped = profile.equipped[category] == item.id
+            local owned = category ~= "bait" and profile.owned[category][item.id]
+            local stock = category == "bait" and (profile.bait[item.id] or 0) or 0
+            local hasBait = category == "bait" and (item.amount == 0 or stock &gt; 0)
+            local caption = equipped and "EQUIPPED" or ((owned or hasBait) and "EQUIP" or (item.cost .. " COINS"))
+            if category == "bait" and equipped and item.amount &gt; 0 then caption = "+10 / " .. item.cost .. " COINS" end
+            button(card, caption, UDim2.fromOffset(136, 36), UDim2.new(1, -150, 0, 22), function()
+                send("buy", { category = category, id = item.id, equip = hasBait and not equipped })
+            end, equipped and C.gold or C.mint)
+            if category == "bait" then
+                text(card, item.amount == 0 and "Unlimited" or (stock .. " casts left"), UDim2.fromOffset(136, 22), UDim2.new(1, -150, 0, 63), 12, C.muted).TextXAlignment = Enum.TextXAlignment.Center
+            end
+        end
+    else
+        if #profile.bag == 0 then text(list, "Your next great catch is under the ice.", UDim2.new(1, 0, 0, 90), UDim2.fromOffset(0, 0), 18, C.muted) end
+        for i = #profile.bag, 1, -1 do
+            local fish = profile.bag[i]
+            local card = frame(list, UDim2.new(1, 0, 0, 72), UDim2.fromOffset(0, 0), C.card)
+            card.LayoutOrder = #profile.bag - i
+            text(card, fish.name, UDim2.new(1, -150, 0, 30), UDim2.fromOffset(14, 7), 17, Color3.fromRGB(fish.color[1], fish.color[2], fish.color[3])).Font = Enum.Font.GothamBold
+            text(card, fish.rarity .. "  /  " .. fish.kg .. " kg", UDim2.new(1, -150, 0, 23), UDim2.fromOffset(14, 39), 13, C.muted)
+            text(card, fish.value .. " coins", UDim2.fromOffset(120, 40), UDim2.new(1, -132, 0, 16), 17, C.gold).TextXAlignment = Enum.TextXAlignment.Right
+        end
+    end
+    list.CanvasPosition = Vector2.zero
+end
+
+openBag = function() modalMode = "bag" render() shade.Visible = true end
+
+local reel = frame(gui, UDim2.fromOffset(490, 218), UDim2.new(0.5, -245, 1, -338))
+reel.Visible = false
+local reelTitle = text(reel, "WAITING FOR A BITE...", UDim2.new(1, -28, 0, 28), UDim2.fromOffset(14, 10), 17, C.gold)
+reelTitle.Font, reelTitle.TextXAlignment = Enum.Font.GothamBold, Enum.TextXAlignment.Center
+local track = frame(reel, UDim2.new(1, -44, 0, 40), UDim2.fromOffset(22, 48), C.dark)
+track.ClipsDescendants = true
+local zone = frame(track, UDim2.fromScale(0.23, 1), UDim2.fromScale(0.5, 0), C.mint)
+zone.BackgroundTransparency, zone.AnchorPoint = 0.3, Vector2.new(0.5, 0)
+local marker = frame(track, UDim2.new(0, 6, 1, -8), UDim2.new(0.5, 0, 0, 4), C.gold)
+marker.AnchorPoint = Vector2.new(0.5, 0)
+local caption = text(reel, "Keep the gold fish marker inside your green zone", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 92), 12, C.muted)
+caption.TextXAlignment = Enum.TextXAlignment.Center
+local progressBack = frame(reel, UDim2.new(0.64, -20, 0, 8), UDim2.fromOffset(22, 123), C.dark)
+local progressFill = frame(progressBack, UDim2.fromScale(0.25, 1), UDim2.fromOffset(0, 0), C.mint)
+local tensionBack = frame(reel, UDim2.new(0.3, 0, 0, 8), UDim2.new(0.66, 0, 0, 123), C.dark)
+local tensionFill = frame(tensionBack, UDim2.fromScale(0, 1), UDim2.fromOffset(0, 0), C.red)
+text(reel, "CATCH PROGRESS", UDim2.fromOffset(180, 20), UDim2.fromOffset(22, 134), 10, C.muted)
+text(reel, "LINE TENSION", UDim2.fromOffset(140, 20), UDim2.new(0.66, 0, 0, 134), 10, C.red)
+local holdButton = button(reel, "HOLD / SPACE TO REEL", UDim2.new(1, -44, 0, 43), UDim2.fromOffset(22, 162), nil)
+
+local function setHeld(value)
+    held = value
+    if token then send("input", { token = token, held = held }) end
+end
+holdButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then setHeld(true) end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.Space or input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then setHeld(false) end
+end)
+UserInputService.WindowFocusReleased:Connect(function() setHeld(false) end)
+UserInputService.InputBegan:Connect(function(input, processed)
+    if UserInputService:GetFocusedTextBox() then return end
+    if input.KeyCode == Enum.KeyCode.Space and fishing then setHeld(true) return end
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.F then send(fishing and "cancel" or "cast")
+    elseif input.KeyCode == Enum.KeyCode.B then send("shop")
+    elseif input.KeyCode == Enum.KeyCode.I then openBag() end
+end)
+
+local function endFishing()
+    fishing, token, held, reel.Visible = false, nil, false, false
+    castButton.Text = "DRILL &amp; FISH  [F]"
+end
+local function drawReel(data)
+    zone.Position, zone.Size = UDim2.fromScale(data.bar, 0), UDim2.fromScale(data.width, 1)
+    marker.Position = UDim2.new(data.target, 0, 0, 4)
+    progressFill.Size, tensionFill.Size = UDim2.fromScale(data.progress, 1), UDim2.fromScale(data.tension, 1)
+end
+
+event.OnClientEvent:Connect(function(kind, data)
+    if kind == "profile" then
+        profile = data
+        coins.Text, bagCount.Text = data.coins .. " coins", #data.bag .. " fish  /  " .. bagValue() .. " coin value"
+        local names = {}
+        for _, category in ipairs({ "auger", "rod", "lure", "bait" }) do
+            local gear = Config.findGear(category, data.equipped[category])
+            table.insert(names, gear.name:gsub(" · 10 casts", ""))
+        end
+        loadout.Text = table.concat(names, "  /  ")
+        if shade.Visible then render() end
+    elseif kind == "notice" then notice(data)
+    elseif kind == "shop" then modalMode = "shop" render() shade.Visible = true
+    elseif kind == "waiting" then
+        fishing, token, held = true, data.token, false
+        shade.Visible, reel.Visible, track.Visible, holdButton.Visible = false, true, false, false
+        reelTitle.Text, caption.Text = "LINE IN. TAKE A BREATH.", "Listening beneath the ice..."
+        progressFill.Size, tensionFill.Size = UDim2.fromScale(0, 1), UDim2.fromScale(0, 1)
+        castButton.Text = "CANCEL CAST  [F]"
+    elseif kind == "bite" then
+        token, track.Visible, holdButton.Visible = data.token, true, true
+        reelTitle.Text = "FISH ON!"
+        caption.Text = "Hold to move right. Release to drift left. Follow the gold fish."
+        drawReel(data)
+    elseif kind == "reel" then drawReel(data)
+    elseif kind == "caught" then
+        endFishing()
+        notice("CAUGHT  " .. data.name .. "\n" .. data.rarity .. "  /  " .. data.kg .. " kg  /  " .. data.value .. " coins", Color3.fromRGB(data.color[1], data.color[2], data.color[3]))
+    elseif kind == "ended" then endFishing() notice(data) end
+end)
+
+local elapsed, lastViewport = 0, Vector2.zero
+RunService.RenderStepped:Connect(function(dt)
+    elapsed = elapsed + dt
+    if token and elapsed &gt; 0.12 then
+        elapsed = 0
+        send("input", { token = token, held = held })
+    end
+    local camera = workspace.CurrentCamera
+    if camera and camera.ViewportSize ~= lastViewport then
+        lastViewport = camera.ViewportSize
+        modalScale.Scale = math.min(1, (lastViewport.X - 24) / 650, (lastViewport.Y - 60) / 530)
+        local scale = math.min(1, (lastViewport.X - 20) / 490)
+        local ds = dock:FindFirstChildOfClass("UIScale") or make("UIScale", dock)
+        local rs = reel:FindFirstChildOfClass("UIScale") or make("UIScale", reel)
+        ds.Scale, rs.Scale = scale, scale
+        dock.AnchorPoint, dock.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -12)
+        reel.AnchorPoint, reel.Position = Vector2.new(0.5, 1), UDim2.new(0.5, 0, 1, -24 - 90 * scale)
+        guide.Visible = lastViewport.X &gt; 850 and lastViewport.Y &gt; 580
+        brand.Visible = lastViewport.X &gt; 490
+    end
+end)
+
+-- Retry the handshake until the server has registered this player.
+task.spawn(function()
+    while not profile do send("ready") task.wait(1) end
+end)
+</ProtectedString>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Lighting" referent="RBX14">
+    <Properties>
+      <string name="Name">Lighting</string>
+    </Properties>
+  </Item>
+</roblox>
